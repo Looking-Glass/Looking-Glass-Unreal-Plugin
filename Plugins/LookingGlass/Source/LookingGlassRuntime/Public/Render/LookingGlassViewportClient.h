@@ -9,6 +9,7 @@
 #include "Runtime/Launch/Resources/Version.h"
 #if ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 2
 #include "ViewportClient.h"
+#include "UObject/ObjectPtr.h"
 #else
 #include "UnrealClient.h"
 #endif
@@ -133,7 +134,7 @@ public:
 	 * @returns	True to consume the key event, false to pass it on.
 	 */
 
-	virtual bool InputKey(FViewport* Viewport, int32 ControllerId, FKey Key, EInputEvent Event, float AmountDepressed = 1.0f, bool bGamepad = false) override;
+	virtual bool InputKey(const FInputKeyEventArgs& EventArgs) override;
 
 	/**
 	 * @fn	virtual bool FLookingGlassViewportClient::InputAxis(FViewport* Viewport, int32 ControllerId, FKey Key, float Delta, float DeltaTime, int32 NumSamples = 1, bool bGamepad = false) override;
@@ -154,11 +155,9 @@ public:
 	 */
 
 	//todo: should override a different method since UE5.1
-	virtual bool InputAxis(FViewport* Viewport, int32 ControllerId, FKey Key, float Delta, float DeltaTime, int32 NumSamples = 1, bool bGamepad = false) override;
+	virtual bool InputAxis(const FInputKeyEventArgs& EventArgs) override;
 
 	virtual bool InputChar(FViewport* Viewport, int32 ControllerId, TCHAR Character) override;
-	virtual bool InputTouch(FViewport* Viewport, int32 ControllerId, uint32 Handle, ETouchType::Type Type, const FVector2D& TouchLocation, float Force, FDateTime DeviceTimestamp, uint32 TouchpadIndex) override;
-	virtual bool InputMotion(FViewport* Viewport, int32 ControllerId, const FVector& Tilt, const FVector& RotationRate, const FVector& Gravity, const FVector& Acceleration) override;
 
 	/**
 	 * @fn	virtual UWorld* FLookingGlassViewportClient::GetWorld() const override
@@ -425,7 +424,7 @@ private:
 
 	EMouseCursor::Type CurrentMouseCursor;
 
-	UTextureRenderTarget2D* StaticQuiltRT;
+	TObjectPtr<UTextureRenderTarget2D> StaticQuiltRT;
 
 	// Information about last rendered scene, used for ELookingGlassPerformanceMode::NonRealtime
 	ULookingGlassSceneCaptureComponent2D* LastRenderedComponent;

@@ -521,8 +521,15 @@ void FLookingGlassViewportClient::RenderToQuilt(ULookingGlassSceneCaptureCompone
 	}
 }
 
-bool FLookingGlassViewportClient::InputKey(FViewport * InViewport, int32 ControllerId, FKey Key, EInputEvent EventType, float AmountDepressed, bool bGamepad)
+bool FLookingGlassViewportClient::InputKey(const FInputKeyEventArgs& EventArgs) 
 {
+	FViewport* InViewport = EventArgs.Viewport;
+	int32 ControllerId = EventArgs.ControllerId;
+	FKey Key = EventArgs.Key;
+	EInputEvent EventType = EventArgs.Event;
+	float AmountDepressed = EventArgs.AmountDepressed;
+	bool bGamepad = EventArgs.IsGamepad();
+
 	ILookingGlassRuntime::Get().OnLookingGlassInputKeyDelegate().Broadcast(InViewport, ControllerId, Key, EventType, AmountDepressed, bGamepad);
 
 	auto LookingGlassSettings = GetDefault<ULookingGlassSettings>();
@@ -562,17 +569,7 @@ bool FLookingGlassViewportClient::InputKey(FViewport * InViewport, int32 Control
 
 			if (FirstLocalPlayerFromController && FirstLocalPlayerFromController->PlayerController)
 			{
-#if ENGINE_MAJOR_VERSION >= 5 && ENGINE_MINOR_VERSION >= 1
-				FInputKeyParams Params;
-				Params.Key = Key;
-				Params.Event = EventType;
-				Params.Delta.X = AmountDepressed;
-				Params.bIsGamepadOverride = bGamepad;
-
-				bResult = FirstLocalPlayerFromController->PlayerController->InputKey(Params);
-#else
-				bResult = FirstLocalPlayerFromController->PlayerController->InputKey(Key, EventType, AmountDepressed, bGamepad);
-#endif
+				bResult = FirstLocalPlayerFromController->PlayerController->InputKey(EventArgs);
 			}
 
 			// A gameviewport is always considered to have responded to a mouse buttons to avoid throttling
@@ -586,76 +583,55 @@ bool FLookingGlassViewportClient::InputKey(FViewport * InViewport, int32 Control
 	return bResult;
 }
 
-bool FLookingGlassViewportClient::InputAxis(FViewport * InViewport, int32 ControllerId, FKey Key, float Delta, float DeltaTime, int32 NumSamples, bool bGamepad)
+bool FLookingGlassViewportClient::InputAxis(const FInputKeyEventArgs& EventArgs)
 {
 	if (IgnoreInput())
 	{
 		return false;
 	}
-
 	if (GWorld == nullptr || GEngine == nullptr || GEngine->GameViewport == nullptr || &GEngine->GameViewport->Viewport == nullptr)
 	{
 		return false;
 	}
 
+	FViewport* InViewport = EventArgs.Viewport;
+	int32 ControllerId = EventArgs.ControllerId;
+	FKey Key = EventArgs.Key;
+	float Delta = EventArgs.AmountDepressed;
+	float DeltaTime = EventArgs.DeltaTime;
+	int32 NumSamples = EventArgs.NumSamples;
+	bool bGamepad = EventArgs.IsGamepad();
 	bool bResult = false;
 
-	// Don't allow mouse/joystick input axes while in PIE and the console has forced the cursor to be visible.  It's
-	// just distracting when moving the mouse causes mouse look while you are trying to move the cursor over a button
-	// in the editor!
-	if (!(GEngine->GameViewport->Viewport->IsSlateViewport() && GEngine->GameViewport->Viewport->IsPlayInEditorViewport()) || GEngine->GameViewport->ViewportConsole == NULL || !GEngine->GameViewport->ViewportConsole->ConsoleActive())
+	// Don't allow mouse/joystick input axes while in PIE and the console has forced the cursor to be visible
+	if (!(GEngine->GameViewport->Viewport->IsSlateViewport() && GEngine->GameViewport->Viewport->IsPlayInEditorViewport()) ||
+		GEngine->GameViewport->ViewportConsole == NULL || !GEngine->GameViewport->ViewportConsole->ConsoleActive())
 	{
-#if ENGINE_MAJOR_VERSION >= 5 && ENGINE_MINOR_VERSION >= 1
-		//todo: since UE5.1 should override a different method, which will receive FInputKeyParams, and simply pass it to the console
 		FInputDeviceId DeviceId = FInputDeviceId::CreateFromInternalId(ControllerId);
-		FInputKeyParams Params;
-		Params.Key = Key;
-		Params.Delta = FVector(static_cast<double>(Delta), 0.0, 0.0);
-		Params.NumSamples = NumSamples;
-		Params.DeltaTime = DeltaTime;
-		Params.bIsGamepadOverride = bGamepad;
-#endif
+
 		// route to subsystems that care
 		if (GEngine->GameViewport->ViewportConsole != NULL)
 		{
-#if ENGINE_MAJOR_VERSION >= 5 && ENGINE_MINOR_VERSION >= 1
 			bResult = GEngine->GameViewport->ViewportConsole->InputAxis(DeviceId, Key, Delta, DeltaTime, NumSamples, bGamepad);
-#else
-			bResult = GEngine->GameViewport->ViewportConsole->InputAxis(ControllerId, Key, Delta, DeltaTime, NumSamples, bGamepad);
-#endif
 		}
+
 		if (!bResult)
 		{
 			ULocalPlayer* const TargetPlayer = GEngine->GetLocalPlayerFromControllerId(GEngine->GameViewport, ControllerId);
 			if (TargetPlayer && TargetPlayer->PlayerController)
 			{
-#if ENGINE_MAJOR_VERSION >= 5 && ENGINE_MINOR_VERSION >= 1
-				bResult = TargetPlayer->PlayerController->InputKey(Params);
-#else
-				bResult = TargetPlayer->PlayerController->InputAxis(Key, Delta, DeltaTime, NumSamples, bGamepad);
-#endif
-			}
-		}
+				FInputKeyEventArgs AxisEventArgs(
+					EventArgs.Viewport,
+					EventArgs.InputDevice,
+					EventArgs.Key,
+					Delta,
+					DeltaTime,
+					NumSamples,
+					EventArgs.EventTimestamp
+				);
 
-		// For PIE, let the next PIE window handle the input if none of our players did
-		// (this allows people to use multiple controllers to control each window)
-		if (InViewport->IsPlayInEditorViewport())
-		{
-			UGameViewportClient *NextViewport = GEngine->GetNextPIEViewport(GEngine->GameViewport);
-			if (NextViewport)
-			{
-#if ENGINE_MAJOR_VERSION >= 5 && ENGINE_MINOR_VERSION >= 1
-				bResult = NextViewport->InputAxis(InViewport, DeviceId, Key, Delta, DeltaTime, NumSamples, bGamepad);
-#else
-				bResult = NextViewport->InputAxis(InViewport, ControllerId, Key, Delta, DeltaTime, NumSamples, bGamepad);
-#endif
+				bResult = TargetPlayer->PlayerController->InputKey(AxisEventArgs);
 			}
-		}
-
-		if (InViewport->IsSlateViewport() && InViewport->IsPlayInEditorViewport())
-		{
-			// Absorb all keys so game input events are not routed to the Slate editor frame
-			bResult = true;
 		}
 	}
 
@@ -663,46 +639,6 @@ bool FLookingGlassViewportClient::InputAxis(FViewport * InViewport, int32 Contro
 }
 
 bool FLookingGlassViewportClient::InputChar(FViewport * InViewport, int32 ControllerId, TCHAR Character)
-{
-	return false;
-}
-
-bool FLookingGlassViewportClient::InputTouch(FViewport * InViewport, int32 ControllerId, uint32 Handle, ETouchType::Type Type, const FVector2D & TouchLocation, float Force, FDateTime DeviceTimestamp, uint32 TouchpadIndex)
-{
-	if (IgnoreInput())
-	{
-		return false;
-	}
-
-	if (GWorld == nullptr || GEngine == nullptr || GEngine->GameViewport == nullptr || &GEngine->GameViewport->Viewport == nullptr)
-	{
-		return false;
-	}
-
-	// route to subsystems that care
-	bool bResult = false;
-	if (GEngine->GameViewport->ViewportConsole)
-	{
-#if ENGINE_MAJOR_VERSION >= 5 && ENGINE_MINOR_VERSION >= 1
-		FInputDeviceId DeviceId = FInputDeviceId::CreateFromInternalId(ControllerId);
-		bResult = GEngine->GameViewport->ViewportConsole->InputTouch(DeviceId, Handle, Type, TouchLocation, Force, DeviceTimestamp, TouchpadIndex);
-#else
-		bResult = GEngine->GameViewport->ViewportConsole->InputTouch(ControllerId, Handle, Type, TouchLocation, Force, DeviceTimestamp, TouchpadIndex);
-#endif
-	}
-	if (!bResult)
-	{
-		ULocalPlayer* const TargetPlayer = GEngine->GetLocalPlayerFromControllerId(GEngine->GameViewport, ControllerId);
-		if (TargetPlayer && TargetPlayer->PlayerController)
-		{
-			bResult = TargetPlayer->PlayerController->InputTouch(Handle, Type, TouchLocation, Force, DeviceTimestamp, TouchpadIndex);
-		}
-	}
-
-	return bResult;
-}
-
-bool FLookingGlassViewportClient::InputMotion(FViewport * InViewport, int32 ControllerId, const FVector & Tilt, const FVector & RotationRate, const FVector & Gravity, const FVector & Acceleration)
 {
 	return false;
 }

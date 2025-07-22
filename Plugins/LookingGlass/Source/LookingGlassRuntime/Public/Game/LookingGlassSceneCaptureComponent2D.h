@@ -160,7 +160,7 @@ public:
 	//~ End UActorComponent Interface
 
 	//~ Begin USceneCaptureComponent Interface
-	virtual void UpdateSceneCaptureContents(FSceneInterface* Scene) override;
+	virtual void UpdateSceneCaptureContents(FSceneInterface* Scene, class ISceneRenderBuilder& SceneRenderBuilder);
 	//~ End USceneCaptureComponent Interface
 
 	/** Top-level rendering function for making a hologram picture */

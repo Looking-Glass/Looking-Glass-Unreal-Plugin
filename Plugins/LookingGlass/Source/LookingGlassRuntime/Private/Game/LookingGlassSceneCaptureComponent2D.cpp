@@ -233,7 +233,7 @@ void ULookingGlassSceneCaptureComponent2D::EndPlay(const EEndPlayReason::Type En
 	ILookingGlassRuntime::Get().GameLookingGlassCaptureComponents.Remove(this);
 }
 
-void ULookingGlassSceneCaptureComponent2D::UpdateSceneCaptureContents(FSceneInterface* Scene)
+void ULookingGlassSceneCaptureComponent2D::UpdateSceneCaptureContents(FSceneInterface* Scene, class ISceneRenderBuilder& SceneRenderBuilder)
 {
 	// This function is called by USceneCaptureComponent2D::CaptureSceneDeferred() and UpdateDeferredCaptures()
 	// when any property of this component is changed. This capture is useless because it is executed in a
@@ -242,7 +242,7 @@ void ULookingGlassSceneCaptureComponent2D::UpdateSceneCaptureContents(FSceneInte
 
 	if (bAllow2DCapture)
 	{
-		Super::UpdateSceneCaptureContents(Scene);
+		Super::UpdateSceneCaptureContents(Scene, SceneRenderBuilder);
 	}
 }
 
