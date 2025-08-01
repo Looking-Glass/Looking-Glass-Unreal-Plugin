@@ -1,4 +1,5 @@
 #include "Game/LookingGlassSceneCaptureComponent2D.h"
+#include "Runtime/Launch/Resources/Version.h" // ensure proper version defines
 #include "Game/LookingGlassDrawFrustumComponent.h"
 #include "LookingGlassBridge.h"
 #include "LookingGlassSettings.h"
@@ -233,6 +234,7 @@ void ULookingGlassSceneCaptureComponent2D::EndPlay(const EEndPlayReason::Type En
 	ILookingGlassRuntime::Get().GameLookingGlassCaptureComponents.Remove(this);
 }
 
+#if (ENGINE_MAJOR_VERSION < 5) || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION < 6)
 void ULookingGlassSceneCaptureComponent2D::UpdateSceneCaptureContents(FSceneInterface* Scene)
 {
 	// This function is called by USceneCaptureComponent2D::CaptureSceneDeferred() and UpdateDeferredCaptures()
@@ -245,6 +247,21 @@ void ULookingGlassSceneCaptureComponent2D::UpdateSceneCaptureContents(FSceneInte
 		Super::UpdateSceneCaptureContents(Scene);
 	}
 }
+#else // EU5.6+
+// UE 5.6 Needs ISceneRenderBuilder argument signature
+void ULookingGlassSceneCaptureComponent2D::UpdateSceneCaptureContents(FSceneInterface* Scene, class ISceneRenderBuilder& SceneRenderBuilder)
+{
+	// This function is called by USceneCaptureComponent2D::CaptureSceneDeferred() and UpdateDeferredCaptures()
+	// when any property of this component is changed. This capture is useless because it is executed in a
+	// different way, also it causes engine to crash with NULL render target. So, let's just declare an empty
+	// implementation. The crash was caused by PostEditChangeProperty or OnRegister calls to parent class.
+
+	if (bAllow2DCapture)
+	{
+		Super::UpdateSceneCaptureContents(Scene, SceneRenderBuilder);
+	}
+}
+#endif
 
 /**
  * This is called when property is modified by InterpPropertyTracks
