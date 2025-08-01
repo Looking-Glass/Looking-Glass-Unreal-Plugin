@@ -1,4 +1,5 @@
 #pragma once
+#include "Runtime/Launch/Resources/Version.h" // ensure proper version defines
 
 #include "CoreMinimal.h"
 #include "Misc/CoreMisc.h"
@@ -116,7 +117,9 @@ public:
 	 */
 
 	virtual void Draw(FViewport* Viewport, FCanvas* Canvas) override;
+	
 
+#if (ENGINE_MAJOR_VERSION < 5) || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION < 6)
 	/**
 	 * @fn	virtual bool FLookingGlassViewportClient::InputKey(FViewport* Viewport, int32 ControllerId, FKey Key, EInputEvent Event, float AmountDepressed = 1.0f, bool bGamepad = false) override;
 	 *
@@ -155,10 +158,48 @@ public:
 
 	//todo: should override a different method since UE5.1
 	virtual bool InputAxis(FViewport* Viewport, int32 ControllerId, FKey Key, float Delta, float DeltaTime, int32 NumSamples = 1, bool bGamepad = false) override;
-
+	
 	virtual bool InputChar(FViewport* Viewport, int32 ControllerId, TCHAR Character) override;
 	virtual bool InputTouch(FViewport* Viewport, int32 ControllerId, uint32 Handle, ETouchType::Type Type, const FVector2D& TouchLocation, float Force, FDateTime DeviceTimestamp, uint32 TouchpadIndex) override;
 	virtual bool InputMotion(FViewport* Viewport, int32 ControllerId, const FVector& Tilt, const FVector& RotationRate, const FVector& Gravity, const FVector& Acceleration) override;
+#else //(ENGINE_MAJOR_VERSION > 5 && ENGINE_MINOR_VERSION >= 6)
+
+	// UE 5.6 has function signature change mainly
+	//		- use of FInputKeyEventArgs EventArgs
+	//		- replacement of FDateTime DeviceTimestamp to uint64 Timestamp and int32
+	//		- replacement of int32 ControllerId to FInputDeviceId ControllerId
+
+	/**
+	 * @fn	virtual bool FLookingGlassViewportClient::InputKey(const FInputKeyEventArgs& EventArgs) override;
+	 *
+	 * @brief	Check a key event received by the viewport. If the viewport client uses the event, it
+	 * 			should return true to consume it.
+	 *
+	 * @param [in]	EventArgs			- The input event arguments for this axis movement.
+	 *
+	 * @returns	True to consume the axis movement, false to pass it on.
+	 */
+
+	virtual bool InputKey(const FInputKeyEventArgs& EventArgs) override;
+
+	/**
+	 * @fn	virtual bool FLookingGlassViewportClient::InputAxis(const FInputKeyEventArgs& EventArgs) override;
+	 *
+	 * @brief	Check an axis movement received by the viewport. If the viewport client uses the
+	 * 			movement, it should return true to consume it.
+	 *
+	 * @param [in]	EventArgs			- The input event arguments for this axis movement.
+	 *
+	 * @returns	True to consume the axis movement, false to pass it on.
+	 */
+
+	virtual bool InputAxis(const FInputKeyEventArgs& EventArgs) override;
+	
+	virtual bool InputChar(FViewport* Viewport, int32 ControllerId, TCHAR Character) override;
+	virtual bool InputTouch(FViewport* Viewport, const FInputDeviceId DeviceId, uint32 Handle, ETouchType::Type Type, const FVector2D& TouchLocation, float Force, uint32 TouchpadIndex, const uint64 Timestamp) override;
+	virtual bool InputMotion(FViewport* Viewport, const FInputDeviceId DeviceId, const FVector& Tilt, const FVector& RotationRate, const FVector& Gravity, const FVector& Acceleration, const uint64 Timestamp) override;
+#endif // EU5.6+
+	
 
 	/**
 	 * @fn	virtual UWorld* FLookingGlassViewportClient::GetWorld() const override
