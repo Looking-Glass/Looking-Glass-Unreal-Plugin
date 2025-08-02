@@ -20,7 +20,7 @@ Alternatively you may get the snapshot of the repository using downloading of zi
 - Pre-requisites: 
 - Looking Glass Bridge 2.5.1 or higher
 - Visual Studio 2022
-- **Unreal Engine 5.5 requires MSVC v143 (14.38 - 17.8). Working with Unreal Engine with another MSVC version will cause the engine to fail to compile.**
+- **Unreal Engine 5.6 requires MSVC v143 (14.38 - 17.8). Working with Unreal Engine with another MSVC version will cause the engine to fail to compile.**
 - Download the project from Github (see above).
 - Find the UnrealSDK.uproject file in the root folder of repository.
 - If you have multiple Unreal engine versions installed, right click on this file, select "Switch unreal engine version" option and select the one which you want to use with this plugin.

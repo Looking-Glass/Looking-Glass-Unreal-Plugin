@@ -1,6 +1,7 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 #pragma once
+#include "Runtime/Launch/Resources/Version.h" // ensure proper version defines
 
 #include "CoreMinimal.h"
 #include "Components/SceneCaptureComponent2D.h"
@@ -62,7 +63,13 @@ public:
 	static void CalculateViewRect(float& U, float& V, float& SizeU, float& SizeV, int32 ViewRows, int32 ViewColumns, int32 ViewCount, int32 ViewIndex);
 
 private:
+
+#if (ENGINE_MAJOR_VERSION < 5) || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION < 6)
 	UTextureRenderTarget2D* RenderTarget;
+#else // EU5.6+
+	// Fix warning AddReferenceObject
+	TObjectPtr<UTextureRenderTarget2D> RenderTarget;
+#endif
 
 	// Same as ViewInfoArr.Num(). Number of views is limited either by GMaxTextureDimensions or MaxViews.
 	uint32 NumViews;
@@ -160,7 +167,12 @@ public:
 	//~ End UActorComponent Interface
 
 	//~ Begin USceneCaptureComponent Interface
+#if (ENGINE_MAJOR_VERSION < 5) || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION < 6)
 	virtual void UpdateSceneCaptureContents(FSceneInterface* Scene) override;
+#else // EU5.6+
+	// UE 5.6 Needs ISceneRenderBuilder argument signature
+	virtual void UpdateSceneCaptureContents(FSceneInterface* Scene, class ISceneRenderBuilder& SceneRenderBuilder) override;
+#endif
 	//~ End USceneCaptureComponent Interface
 
 	/** Top-level rendering function for making a hologram picture */
