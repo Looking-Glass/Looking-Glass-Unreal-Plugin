@@ -162,7 +162,7 @@ public:
 	virtual bool InputChar(FViewport* Viewport, int32 ControllerId, TCHAR Character) override;
 	virtual bool InputTouch(FViewport* Viewport, int32 ControllerId, uint32 Handle, ETouchType::Type Type, const FVector2D& TouchLocation, float Force, FDateTime DeviceTimestamp, uint32 TouchpadIndex) override;
 	virtual bool InputMotion(FViewport* Viewport, int32 ControllerId, const FVector& Tilt, const FVector& RotationRate, const FVector& Gravity, const FVector& Acceleration) override;
-#else //(ENGINE_MAJOR_VERSION > 5 && ENGINE_MINOR_VERSION >= 6)
+#else // EU5.6+
 
 	// UE 5.6 has function signature change mainly
 	//		- use of FInputKeyEventArgs EventArgs

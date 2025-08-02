@@ -706,7 +706,7 @@ bool FLookingGlassViewportClient::InputMotion(FViewport * InViewport, int32 Cont
 {
 	return false;
 }
-#else //(ENGINE_MAJOR_VERSION > 5 && ENGINE_MINOR_VERSION >= 6)
+#else // EU5.6+
 
 // UE 5.6 has function signature change mainly
 //		- use of FInputKeyEventArgs EventArgs
