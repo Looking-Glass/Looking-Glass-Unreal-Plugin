@@ -37,5 +37,5 @@ namespace LookingGlass
 	 * @param 		  	ViewIndex	The current view.
 	 */
 
-	void CopyToQuiltShader_RenderThread(FRHICommandListImmediate& RHICmdList, const FCopyToQuiltRenderContext& Context);
+	LOOKINGGLASSRUNTIME_API void CopyToQuiltShader_RenderThread(FRHICommandListImmediate& RHICmdList, const FCopyToQuiltRenderContext& Context);
 }

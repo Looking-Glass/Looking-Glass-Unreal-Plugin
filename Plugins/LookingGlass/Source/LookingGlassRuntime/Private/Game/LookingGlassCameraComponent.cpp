@@ -475,6 +475,45 @@ float ULookingGlassCameraComponent::GetCameraDistance() const
 	return Size / FMath::Tan(FMath::DegreesToRadians(GetLookingGlassFOV() * 0.5f));
 }
 
+void ULookingGlassCameraComponent::ComputeViewInfo(int32 ViewIndex, int32 NumTiles, float ViewConeDegrees, FVector& OutViewLocation, FMatrix& OutViewRotationMatrix, FMatrix& OutProjectionMatrix) const
+{
+	float CamDistance = GetCameraDistance();
+	float ViewConeSweep = CamDistance * FMath::Tan(FMath::DegreesToRadians(ViewConeDegrees));
+
+	// Compute rotation matrix. Remove the translation from the transform because we only need rotation.
+	FTransform Transform = GetComponentToWorld();
+	Transform.SetTranslation(FVector::ZeroVector);
+	Transform.SetScale3D(FVector::OneVector);
+
+	// Swap axis st. x=z,y=x,z=y (Unreal coordinate space) so that z is up
+	OutViewRotationMatrix = Transform.ToInverseMatrixWithScale() * FMatrix(
+		FPlane(0, 0, 1, 0),
+		FPlane(1, 0, 0, 0),
+		FPlane(0, 1, 0, 0),
+		FPlane(0, 0, 0, 1));
+
+	// If NumTiles is 1, take the center view
+	float CurrentViewLerp = 0.f;
+	if (NumTiles > 1)
+	{
+		CurrentViewLerp = (float)ViewIndex / (NumTiles - 1.f) - .5f;
+	}
+
+	float ViewOffsetX = CurrentViewLerp * ViewConeSweep;
+	float ProjModifier = 1.0f / Size;
+	float ProjOffsetX = ViewOffsetX * ProjModifier;
+
+	UE_LOG(LookingGlassLogGame, Verbose, TEXT("ViewOffsetX: %f, ProjOffsetX: %f"), ViewOffsetX, ProjOffsetX);
+
+	FTransform RelativeTransform = FTransform::Identity;
+	RelativeTransform.SetTranslation(FVector(0.0f, ViewOffsetX, 0.0f));
+
+	FTransform WorldTransform = RelativeTransform * GetComponentToWorld();
+	OutViewLocation = WorldTransform.GetTranslation();
+
+	OutProjectionMatrix = GenerateProjectionMatrix(ProjOffsetX, 0.f);
+}
+
 void ULookingGlassCameraComponent::SetTilingProperties(ELookingGlassQualitySettings InTilingQuailty)
 {
 	if (TilingQuality != InTilingQuailty)
@@ -700,30 +739,11 @@ void ULookingGlassCameraComponent::RenderViews()
 	// Release RT used for 2D rendering, if any
 	TextureTarget2DRendering = nullptr;
 
-	// Setup all render targets
-	float CamDistance = GetCameraDistance();
-
 	// Get the ViewCone value for current device
 	const FLGDeviceCalibration& Calibration = ILookingGlassRuntime::Get().GetCurrentCalibration();
 	float ViewCone = Calibration.ViewCone;
-	float ViewConeSweep = CamDistance * FMath::Tan(FMath::DegreesToRadians(ViewCone));
 
 	int32 NumTiles = TilingValues.GetNumTiles();
-
-	// Compute rotation matrix
-	FTransform Transform = GetComponentToWorld();
-
-	// Remove the translation from Transform because we only need rotation.
-	Transform.SetTranslation(FVector::ZeroVector);
-	Transform.SetScale3D(FVector::OneVector);
-	FMatrix ViewRotationMatrix = Transform.ToInverseMatrixWithScale();
-
-	// Swap axis st. x=z,y=x,z=y (Unreal coordinate space) so that z is up
-	ViewRotationMatrix = ViewRotationMatrix * FMatrix(
-		FPlane(0, 0, 1, 0),
-		FPlane(1, 0, 0, 0),
-		FPlane(0, 1, 0, 0),
-		FPlane(0, 0, 0, 1));
 
 	for (FLookingGlassRenderingConfig& RenderingConfig : RenderingConfigs.Configs)
 	{
@@ -740,30 +760,9 @@ void ULookingGlassCameraComponent::RenderViews()
 
 		for (int32 ViewIndex = 0; ViewIndex < NumViews; ++ViewIndex)
 		{
-			// If NumTiles is 1, take the center view
-			float CurrentViewLerp = 0.f;
-			if (NumTiles > 1)
-			{
-				CurrentViewLerp = (float)(RenderingConfig.GetFirstViewIndex() + ViewIndex) / (NumTiles - 1.f) - .5f;
-			}
-
-			float ViewOffsetX = CurrentViewLerp * ViewConeSweep;
-			float ProjModifier = 1.0f / Size;
-			float ProjOffsetX = ViewOffsetX * ProjModifier;
-
-			UE_LOG(LookingGlassLogGame, Verbose, TEXT("ViewOffsetX: %f, ProjOffsetX: %f"), ViewOffsetX, ProjOffsetX);
-
-			FTransform RelativeTransform = FTransform::Identity;
-			RelativeTransform.SetTranslation(FVector(0.0f, ViewOffsetX, 0.0f));
-
-			FTransform WorldTransform = GetComponentToWorld();
-			WorldTransform = RelativeTransform * WorldTransform;
-			FVector ViewLocation = WorldTransform.GetTranslation();
-
 			FSceneCaptureViewInfo& ViewInfo = RenderingConfig.GetViewInfoArr()[ViewIndex];
-			ViewInfo.ViewRotationMatrix = ViewRotationMatrix;
-			ViewInfo.ViewLocation = ViewLocation;
-			ViewInfo.ProjectionMatrix = GenerateProjectionMatrix(ProjOffsetX, 0.f);
+			ComputeViewInfo(RenderingConfig.GetFirstViewIndex() + ViewIndex, NumTiles, ViewCone,
+				ViewInfo.ViewLocation, ViewInfo.ViewRotationMatrix, ViewInfo.ProjectionMatrix);
 		}
 
 		// Render view

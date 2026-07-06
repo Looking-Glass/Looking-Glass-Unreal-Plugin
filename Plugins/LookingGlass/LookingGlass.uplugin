@@ -20,10 +20,22 @@
       "WhitelistPlatforms": [ "Win64" ]
     },
     {
+      "Name": "LookingGlassMovieRenderPipeline",
+      "Type": "Runtime",
+      "LoadingPhase": "Default",
+      "WhitelistPlatforms": [ "Win64" ]
+    },
+    {
       "Name": "LookingGlassEditor",
       "Type": "Editor",
       "LoadingPhase": "Default",
       "WhitelistPlatforms": [ "Win64" ]
+    }
+  ],
+  "Plugins": [
+    {
+      "Name": "MovieRenderPipeline",
+      "Enabled": true
     }
   ]
 }

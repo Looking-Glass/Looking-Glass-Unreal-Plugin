@@ -102,6 +102,23 @@ public:
 	// FieldOfView clamped to the range supported by the hologram rendering math
 	float GetLookingGlassFOV() const;
 
+	/**
+	 * Compute the view matrices for a single quilt tile view. Shared by the realtime quilt
+	 * rendering (RenderViews) and the Movie Render Queue quilt pass, so both produce identical
+	 * hologram geometry.
+	 *
+	 * Note: uses the near/far clipping planes computed by UpdateCameraPosition(); call it first
+	 * if Size / FieldOfView may have changed.
+	 *
+	 * @param ViewIndex				Tile index in [0, NumTiles)
+	 * @param NumTiles				Total number of tiles in the quilt
+	 * @param ViewConeDegrees		Full horizontal view cone angle of the target device
+	 * @param OutViewLocation		World-space location of this view
+	 * @param OutViewRotationMatrix	View rotation matrix (in Unreal rendering axes)
+	 * @param OutProjectionMatrix	Off-axis projection matrix of this view
+	 */
+	void ComputeViewInfo(int32 ViewIndex, int32 NumTiles, float ViewConeDegrees, FVector& OutViewLocation, FMatrix& OutViewRotationMatrix, FMatrix& OutProjectionMatrix) const;
+
 	const FLookingGlassRenderingConfigs& GetRenderingConfigs() const { return RenderingConfigs; }
 
 	static void SetGlobalTilingProperties(ELookingGlassQualitySettings InTilingQuailty);
