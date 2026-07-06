@@ -23,13 +23,13 @@ class ULookingGlassSceneCaptureComponent2D;
  * The Looking Glass camera. This is the user-facing component of the plugin: it inherits from
  * UCameraComponent, so it supports all conventional camera workflows - possessing it from a
  * Camera Cuts track, piloting it in the viewport, and animating transform and FieldOfView in
- * Sequencer. Movie Render Queue (including Path Tracing) can render through it like through any
- * other camera; note that MRQ currently outputs the standard single camera view, not the quilt.
+ * Sequencer. Movie Render Queue can render the standard single camera view through it like through
+ * any other camera, and the LookingGlassMovieRenderPipeline module provides a dedicated quilt pass.
  *
  * The Looking Glass quilt (multi-view) rendering is performed through an internal, transient
  * ULookingGlassSceneCaptureComponent2D "capture driver" which this component creates and keeps
- * in sync with the camera settings. Rendering quilts through Movie Render Queue itself is a
- * planned follow-up; see the todo on RenderViews() for the intended integration point.
+ * in sync with the camera settings. The MRQ quilt pass shares this component's per-view math via
+ * ComputeViewInfo(), so realtime previews and offline quilts stay geometrically aligned.
  */
 UCLASS(ClassGroup = Rendering, editinlinenew, meta = (BlueprintSpawnableComponent, DisplayName = "Looking Glass Camera"), hidecategories = (Collision, Object, Physics))
 class LOOKINGGLASSRUNTIME_API ULookingGlassCameraComponent : public UCameraComponent

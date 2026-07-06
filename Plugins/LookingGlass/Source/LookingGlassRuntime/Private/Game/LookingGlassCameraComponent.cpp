@@ -308,8 +308,8 @@ void ULookingGlassCameraComponent::GetCameraView(float DeltaTime, FMinimalViewIn
  */
 void ULookingGlassCameraComponent::PostInterpChange(FProperty* PropertyThatChanged)
 {
-	Super::PostInterpChange(PropertyThatChanged);
-
+	// Note: deliberately not calling Super::PostInterpChange() - it's a deprecated no-op left over
+	// from Matinee, which was removed in UE 5.0.
 	const FName PropertyName = PropertyThatChanged->GetFName();
 	if (PropertyName == GET_MEMBER_NAME_CHECKED(ULookingGlassCameraComponent, Size) ||
 		PropertyName == GET_MEMBER_NAME_CHECKED(ULookingGlassCameraComponent, FieldOfView))

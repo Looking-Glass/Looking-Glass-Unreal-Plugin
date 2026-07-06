@@ -33,7 +33,7 @@ public:
 
 	// The user-facing camera of this actor. Being a regular UCameraComponent subclass, it can be
 	// bound to Camera Cuts tracks, piloted in the viewport and used with Movie Render Queue like
-	// any other camera (MRQ outputs the standard camera view; quilt output is a planned follow-up).
+	// any other camera. Quilt output is provided by the LookingGlassMovieRenderPipeline MRQ pass.
 	ULookingGlassCameraComponent* GetLookingGlassCamera() const { return LookingGlassCamera; }
 
 protected:
