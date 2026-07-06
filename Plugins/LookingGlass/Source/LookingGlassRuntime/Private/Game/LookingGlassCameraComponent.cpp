@@ -728,11 +728,10 @@ void ULookingGlassCameraComponent::SetupCaptureDriver()
 	CaptureShowFlags.SetMotionBlur(bEnableMotionBlur);
 }
 
-// Called by LookingGlassViewportClient used for capturing new snapshot of scene from the camera
-//todo: Movie Render Queue integration. To render quilts through MRQ (with its high-quality /
-// Path Tracing pipelines), add an MRQ setting or render pass which calls RenderViews() (or walks
-// RenderingConfigs and submits each view through MRQ's renderer) once per output frame, then
-// composites the tiles into a quilt the same way FLookingGlassViewportClient::RenderToQuilt does.
+// Called by LookingGlassViewportClient used for capturing new snapshot of scene from the camera.
+// Note: this is the realtime preview path. Offline quilt rendering through Movie Render Queue
+// (including Path Tracing) is implemented by UMoviePipelineLookingGlassQuiltPass in the
+// LookingGlassMovieRenderPipeline module, which shares the per-view math via ComputeViewInfo().
 void ULookingGlassCameraComponent::RenderViews()
 {
 	SetupCaptureDriver();

@@ -12,16 +12,17 @@
 
 #include "CanvasTypes.h"
 #include "Camera/PlayerCameraManager.h"
+#include "DataDrivenShaderPlatformInfo.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "Engine/World.h"
 #include "EngineModule.h" // for GetRendererModule()
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/WorldSettings.h"
-#include "HAL/IConsoleManager.h"
 #include "ImagePixelData.h"
 #include "LegacyScreenPercentageDriver.h"
 #include "Misc/App.h"
 #include "RenderingThread.h"
+#include "RenderUtils.h" // for IsRayTracingEnabled()
 #include "RHI.h"
 #include "SceneInterface.h"
 #include "SceneView.h"
@@ -39,33 +40,12 @@ void UMoviePipelineLookingGlassQuiltPass::SetupImpl(const MoviePipeline::FMovieP
 	Super::SetupImpl(InPassInitSettings);
 
 	bLoggedMissingCamera = false;
-
-	// Steer the Path Tracer sample target to our per-view sample count. The Path Tracer accumulates
-	// samples across repeated renders of the same view (through the persistent per-tile view states)
-	// until this target is reached.
-	if (bUsePathTracing)
-	{
-		if (IConsoleVariable* SamplesCVar = IConsoleManager::Get().FindConsoleVariable(TEXT("r.PathTracing.SamplesPerPixel")))
-		{
-			SavedPathTracingSamplesPerPixel = SamplesCVar->GetInt();
-			SamplesCVar->Set(FMath::Max(1, PathTracerSamplesPerView), ECVF_SetByConsole);
-		}
-	}
 }
 
 void UMoviePipelineLookingGlassQuiltPass::TeardownImpl()
 {
 	// Make sure no in-flight rendering still references our view states or render targets
 	FlushRenderingCommands();
-
-	if (SavedPathTracingSamplesPerPixel >= 0)
-	{
-		if (IConsoleVariable* SamplesCVar = IConsoleManager::Get().FindConsoleVariable(TEXT("r.PathTracing.SamplesPerPixel")))
-		{
-			SamplesCVar->Set(SavedPathTracingSamplesPerPixel, ECVF_SetByConsole);
-		}
-		SavedPathTracingSamplesPerPixel = -1;
-	}
 
 	for (FSceneViewStateReference& ViewState : TileViewStates)
 	{
@@ -122,7 +102,7 @@ FLookingGlassTilingQuality UMoviePipelineLookingGlassQuiltPass::ResolveTilingVal
 	return TilingValues;
 }
 
-void UMoviePipelineLookingGlassQuiltPass::EnsureResources(const FLookingGlassTilingQuality& TilingValues, UWorld* World)
+void UMoviePipelineLookingGlassQuiltPass::EnsureRenderTargets(const FLookingGlassTilingQuality& TilingValues)
 {
 	// Quilt-sized composition target
 	if (QuiltRenderTarget == nullptr)
@@ -151,7 +131,10 @@ void UMoviePipelineLookingGlassQuiltPass::EnsureResources(const FLookingGlassTil
 		TileRenderTarget->ResizeTarget(TilingValues.TileSizeX, TilingValues.TileSizeY);
 		TileRenderTarget->UpdateResourceImmediate();
 	}
+}
 
+void UMoviePipelineLookingGlassQuiltPass::EnsureViewStates(const FLookingGlassTilingQuality& TilingValues, UWorld* World)
+{
 	// One persistent view state per tile: the Path Tracer accumulates its samples in the view
 	// state, and eye adaptation history lives there as well
 	const int32 NumTiles = TilingValues.GetNumTiles();
@@ -253,6 +236,15 @@ void UMoviePipelineLookingGlassQuiltPass::RenderTileView(UWorld* World, ULooking
 		View->OverridePostProcessSettings(PPSettings, PPWeight);
 		View->EndFinalPostprocessSettings(ViewInitOptions);
 
+		if (bPathTracing)
+		{
+			// Offline-marked views take their Path Tracer sample target from the final post process
+			// settings (not from r.PathTracing.SamplesPerPixel). Write it after all blending so the
+			// value is exact: the Path Tracer accumulates across our repeated renders (through the
+			// persistent per-tile view state) until this target is reached.
+			View->FinalPostProcessSettings.PathTracingSamplesPerPixel = FMath::Max(1, PathTracerSamplesPerView);
+		}
+
 		FCanvas Canvas(RTResource, nullptr, GameTime, World->Scene->GetFeatureLevel());
 		GetRendererModule().BeginRenderingViewFamily(&Canvas, &ViewFamily);
 	}
@@ -290,15 +282,19 @@ void UMoviePipelineLookingGlassQuiltPass::SubmitQuiltToOutput(const FMoviePipeli
 	TArray<FColor> Bitmap;
 	FReadSurfaceDataFlags ReadSurfaceDataFlags;
 	ReadSurfaceDataFlags.SetLinearToGamma(false);
-	if (!QuiltResource->ReadPixels(Bitmap, ReadSurfaceDataFlags))
+	if (QuiltResource != nullptr && QuiltResource->ReadPixels(Bitmap, ReadSurfaceDataFlags))
 	{
-		UE_LOG(LogMovieRenderPipeline, Error, TEXT("LookingGlassQuilt: failed to read back the quilt render target"));
-		return;
+		for (FColor& Color : Bitmap)
+		{
+			Color.A = 255;
+		}
 	}
-
-	for (FColor& Color : Bitmap)
+	else
 	{
-		Color.A = 255;
+		// The output merger expects a frame for every declared pass; deliver black rather than
+		// stranding the render waiting for this pass forever
+		UE_LOG(LogMovieRenderPipeline, Error, TEXT("LookingGlassQuilt: failed to read back the quilt render target; submitting a black frame"));
+		Bitmap.Init(FColor::Black, QuiltRenderTarget->SizeX * QuiltRenderTarget->SizeY);
 	}
 
 	TSharedRef<FImagePixelDataPayload, ESPMode::ThreadSafe> FramePayload = MakeShared<FImagePixelDataPayload, ESPMode::ThreadSafe>();
@@ -335,56 +331,23 @@ void UMoviePipelineLookingGlassQuiltPass::RenderSample_GameThreadImpl(const FMov
 		return;
 	}
 
-	UWorld* World = GetPipeline()->GetWorld();
-	if (World == nullptr || World->Scene == nullptr)
-	{
-		return;
-	}
-
+	// The output merger expects a frame from this pass no matter what happens below, so create the
+	// quilt target first and route every failure path through SubmitQuiltToOutput
 	const FLookingGlassTilingQuality TilingValues = ResolveTilingValues();
-	EnsureResources(TilingValues, World);
+	EnsureRenderTargets(TilingValues);
 
-	ULookingGlassCameraComponent* Camera = ResolveLookingGlassCamera(World);
-	if (Camera != nullptr)
+	UWorld* World = GetPipeline()->GetWorld();
+	ULookingGlassCameraComponent* Camera = nullptr;
+	if (World != nullptr && World->Scene != nullptr)
 	{
-		// Refresh near/far clipping planes in case Size or FieldOfView are animated
-		Camera->UpdateCameraPosition();
-
-		float EffectiveViewCone = ViewCone;
-		if (bUseDeviceViewCone)
-		{
-			const float DeviceViewCone = ULookingGlassCameraComponent::GetDeviceViewCone();
-			if (DeviceViewCone > 0.f)
-			{
-				EffectiveViewCone = DeviceViewCone;
-			}
-		}
-
-		const bool bPathTracing = bUsePathTracing && IsRayTracingEnabled();
-		if (bUsePathTracing && !bPathTracing)
-		{
-			UE_LOG(LogMovieRenderPipeline, Warning, TEXT("LookingGlassQuilt: Path Tracing requested but ray tracing is not enabled/supported; falling back to the deferred renderer"));
-		}
-
-		// Push any pending scene/component updates before manual scene rendering
-		World->SendAllEndOfFrameUpdates();
-
-		const int32 NumTiles = TilingValues.GetNumTiles();
-		for (int32 TileIndex = 0; TileIndex < NumTiles; ++TileIndex)
-		{
-			RenderTileView(World, Camera, TileIndex, NumTiles, EffectiveViewCone, bPathTracing);
-			CopyTileToQuilt(TilingValues, TileIndex);
-
-			// Drain the render thread once per tile: with many tiles and many Path Tracer samples
-			// per tile, letting all scene renders of a frame queue up unthrottled can exhaust memory
-			FlushRenderingCommands();
-		}
+		Camera = ResolveLookingGlassCamera(World);
 	}
-	else
+
+	if (Camera == nullptr)
 	{
 		if (!bLoggedMissingCamera)
 		{
-			UE_LOG(LogMovieRenderPipeline, Error, TEXT("LookingGlassQuilt: no LookingGlassCamera component found on the view target (bind a LookingGlassCapture actor to the Camera Cuts track). Rendering black frames."));
+			UE_LOG(LogMovieRenderPipeline, Error, TEXT("LookingGlassQuilt: no world scene, or no LookingGlassCamera component on the view target (bind a LookingGlassCapture actor to the Camera Cuts track). Rendering black frames."));
 			bLoggedMissingCamera = true;
 		}
 
@@ -397,6 +360,48 @@ void UMoviePipelineLookingGlassQuiltPass::RenderSample_GameThreadImpl(const FMov
 				RHICmdList.BeginRenderPass(RPInfo, TEXT("ClearLookingGlassQuilt"));
 				RHICmdList.EndRenderPass();
 			});
+
+		SubmitQuiltToOutput(InSampleState, TilingValues);
+		return;
+	}
+
+	EnsureViewStates(TilingValues, World);
+
+	// Refresh near/far clipping planes in case Size or FieldOfView are animated
+	Camera->UpdateCameraPosition();
+
+	float EffectiveViewCone = ViewCone;
+	if (bUseDeviceViewCone)
+	{
+		const float DeviceViewCone = ULookingGlassCameraComponent::GetDeviceViewCone();
+		if (DeviceViewCone > 0.f)
+		{
+			EffectiveViewCone = DeviceViewCone;
+		}
+	}
+
+	// Path tracing needs both ray tracing and path tracing support on the active shader platform;
+	// with only the former, the renderer would silently draw without the path tracer
+	const bool bPathTracing = bUsePathTracing
+		&& IsRayTracingEnabled()
+		&& FDataDrivenShaderPlatformInfo::GetSupportsPathTracing(World->Scene->GetShaderPlatform());
+	if (bUsePathTracing && !bPathTracing)
+	{
+		UE_LOG(LogMovieRenderPipeline, Warning, TEXT("LookingGlassQuilt: Path Tracing requested but ray tracing/path tracing is not enabled or not supported on this platform; falling back to the deferred renderer"));
+	}
+
+	// Push any pending scene/component updates before manual scene rendering
+	World->SendAllEndOfFrameUpdates();
+
+	const int32 NumTiles = TilingValues.GetNumTiles();
+	for (int32 TileIndex = 0; TileIndex < NumTiles; ++TileIndex)
+	{
+		RenderTileView(World, Camera, TileIndex, NumTiles, EffectiveViewCone, bPathTracing);
+		CopyTileToQuilt(TilingValues, TileIndex);
+
+		// Drain the render thread once per tile: with many tiles and many Path Tracer samples
+		// per tile, letting all scene renders of a frame queue up unthrottled can exhaust memory
+		FlushRenderingCommands();
 	}
 
 	SubmitQuiltToOutput(InSampleState, TilingValues);

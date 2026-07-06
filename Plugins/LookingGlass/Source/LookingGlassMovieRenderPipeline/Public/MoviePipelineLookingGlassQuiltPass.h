@@ -92,8 +92,11 @@ private:
 	// Resolve TilingSettings into concrete tiling values
 	FLookingGlassTilingQuality ResolveTilingValues() const;
 
-	// Make sure render targets and per-tile view states match the tiling setup
-	void EnsureResources(const FLookingGlassTilingQuality& TilingValues, UWorld* World);
+	// Make sure the quilt/tile render targets match the tiling setup
+	void EnsureRenderTargets(const FLookingGlassTilingQuality& TilingValues);
+
+	// Make sure the per-tile view states match the tiling setup
+	void EnsureViewStates(const FLookingGlassTilingQuality& TilingValues, UWorld* World);
 
 	// Render one tile view into TileRenderTarget
 	void RenderTileView(UWorld* World, ULookingGlassCameraComponent* Camera, int32 TileIndex, int32 NumTiles, float ViewConeDegrees, bool bPathTracing);
@@ -117,9 +120,6 @@ private:
 
 	/** Persistent per-tile view states; required for Path Tracer sample accumulation (and eye adaptation) */
 	TArray<FSceneViewStateReference> TileViewStates;
-
-	/** Saved value of r.PathTracing.SamplesPerPixel, restored on teardown */
-	int32 SavedPathTracingSamplesPerPixel = -1;
 
 	/** Whether a "no camera found" error was already logged (log once per job, render black frames) */
 	bool bLoggedMissingCamera = false;
