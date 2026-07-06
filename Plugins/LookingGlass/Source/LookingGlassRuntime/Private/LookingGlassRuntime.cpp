@@ -11,7 +11,7 @@
 
 #include "Misc/LookingGlassHelpers.h"
 #include "Misc/LookingGlassLog.h"
-#include "Game/LookingGlassSceneCaptureComponent2D.h"
+#include "Game/LookingGlassCameraComponent.h"
 
 #include "Managers/LookingGlassCommandLineManager.h"
 #include "Managers/LookingGlassLaunchManager.h"
@@ -113,7 +113,7 @@ void FLookingGlassRuntimeModule::OnDisplayMetricsChanged(const FDisplayMetrics& 
 			}
 
 			NumMonitors = InDisplayMetrics.MonitorInfo.Num();
-			ULookingGlassSceneCaptureComponent2D::UpdateTilingPropertiesForAllComponents();
+			ULookingGlassCameraComponent::UpdateTilingPropertiesForAllComponents();
 		});
 }
 
@@ -240,7 +240,7 @@ void FLookingGlassRuntimeModule::StartPlayer(ELookingGlassModeType LookingGlassM
 			MakeDefaultCalibration();
 		}
 		// Update tiling settings, mainly needed for "Automatic" preset
-		ULookingGlassSceneCaptureComponent2D::UpdateTilingPropertiesForAllComponents();
+		ULookingGlassCameraComponent::UpdateTilingPropertiesForAllComponents();
 
 		LookingGlassWindow = SNew(SWindow)
 			.Type(EWindowType::GameWindow)

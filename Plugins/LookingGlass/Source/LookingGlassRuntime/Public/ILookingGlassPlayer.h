@@ -6,7 +6,7 @@
 
 class SLookingGlassViewport;
 class UTextureRenderTarget2D;
-class ULookingGlassSceneCaptureComponent2D;
+class ULookingGlassCameraComponent;
 class FLookingGlassCommandLineManager;
 class FViewport;
 
@@ -163,8 +163,9 @@ protected:
 	FOnWindowClosed OnWindowClosedDelegate;
 
 public:
+	// Registered LookingGlass cameras. The first entry of each list is the "active" one used for rendering.
 #if WITH_EDITOR
-	TArray<TWeakObjectPtr<ULookingGlassSceneCaptureComponent2D> > EditorLookingGlassCaptureComponents;
+	TArray<TWeakObjectPtr<ULookingGlassCameraComponent> > EditorLookingGlassCameras;
 #endif
-	TArray<TWeakObjectPtr<ULookingGlassSceneCaptureComponent2D> > GameLookingGlassCaptureComponents;
+	TArray<TWeakObjectPtr<ULookingGlassCameraComponent> > GameLookingGlassCameras;
 };

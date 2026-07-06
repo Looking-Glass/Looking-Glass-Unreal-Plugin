@@ -14,7 +14,7 @@
 #endif
 
 class UTextureRenderTarget2D;
-class ULookingGlassSceneCaptureComponent2D;
+class ULookingGlassCameraComponent;
 class FViewport;
 class FSceneViewport;
 
@@ -314,7 +314,7 @@ private:
 
 	void VisualizeRenderTarget(FViewport* InViewport, UTextureRenderTarget2D* QuiltRT, bool bRenderOnDevice, const FIntPoint& Tiles, float Aspect);
 
-	void RenderToQuilt(ULookingGlassSceneCaptureComponent2D* CaptureComponent, UTextureRenderTarget2D* InQuiltRT);
+	void RenderToQuilt(ULookingGlassCameraComponent* LookingGlassCamera, UTextureRenderTarget2D* InQuiltRT);
 
 	/**
 	 * @fn	bool FLookingGlassViewportClient::HandleScreenshotQuiltCommand(const TCHAR* Cmd, FOutputDevice& Ar);
@@ -390,19 +390,19 @@ private:
 
 	bool GetRenderTargetScreenShot(TWeakObjectPtr<UTextureRenderTarget2D> TextureRenderTarget2D, TArray<FColor>& Bitmap, const FIntRect& ViewRect = FIntRect());
 
-	void ProcessScreenshot2D(TWeakObjectPtr<ULookingGlassSceneCaptureComponent2D> LookingGlassCaptureComponent);
+	void ProcessScreenshot2D(TWeakObjectPtr<ULookingGlassCameraComponent> LookingGlassCamera);
 
 	/**
-	 * @fn	UTextureRenderTarget2D* FLookingGlassViewportClient::GetQuiltRT(TWeakObjectPtr<ULookingGlassSceneCaptureComponent2D> LookingGlassCaptureComponent);
+	 * @fn	UTextureRenderTarget2D* FLookingGlassViewportClient::GetQuiltRT(TWeakObjectPtr<ULookingGlassCameraComponent> LookingGlassCamera);
 	 *
 	 * @brief	Gets quilt render target texture
 	 *
-	 * @param	LookingGlassCapture	The LookingGlass capture.
+	 * @param	LookingGlassCamera	The LookingGlass camera.
 	 *
 	 * @returns	Null if it fails, else the quilt right.
 	 */
 
-	UTextureRenderTarget2D* GetQuiltRT(TWeakObjectPtr<ULookingGlassSceneCaptureComponent2D> LookingGlassCaptureComponent);
+	UTextureRenderTarget2D* GetQuiltRT(TWeakObjectPtr<ULookingGlassCameraComponent> LookingGlassCamera);
 
 	void SaveScreenShot(const TArray<FColor>& Bitmap, const FIntVector& Size, const FString& ScreenShotName, const FLookingGlassScreenshotSettings* pScreenShotSettings);
 
@@ -428,7 +428,7 @@ private:
 	UTextureRenderTarget2D* StaticQuiltRT;
 
 	// Information about last rendered scene, used for ELookingGlassPerformanceMode::NonRealtime
-	ULookingGlassSceneCaptureComponent2D* LastRenderedComponent;
+	ULookingGlassCameraComponent* LastRenderedComponent;
 	double LastViewportUpdateTime;
 	bool bLastModeWas2D;
 

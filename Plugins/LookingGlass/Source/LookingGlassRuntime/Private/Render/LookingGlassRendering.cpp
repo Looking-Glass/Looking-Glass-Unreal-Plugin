@@ -1,5 +1,5 @@
 #include "Render/LookingGlassRendering.h"
-#include "Game/LookingGlassSceneCaptureComponent2D.h"
+#include "Game/LookingGlassCameraComponent.h"
 
 #include "ILookingGlassRuntime.h"
 #include "Misc/LookingGlassLog.h"

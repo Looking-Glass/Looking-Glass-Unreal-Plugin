@@ -6,7 +6,7 @@
 #include "Misc/LookingGlassStats.h"
 #include "Misc/LookingGlassHelpers.h"
 #include "ILookingGlassRuntime.h"
-#include "Game/LookingGlassSceneCaptureComponent2D.h"
+#include "Game/LookingGlassCameraComponent.h"
 
 #include "CanvasTypes.h"
 #include "ClearQuad.h"
@@ -244,7 +244,7 @@ void FLookingGlassViewportClient::Draw(FViewport* InViewport, FCanvas* InCanvas)
 
 	const ULookingGlassSettings* LookingGlassSettings = GetDefault<ULookingGlassSettings>();
 	const FLookingGlassRenderingSettings& RenderingSettings = LookingGlassSettings->LookingGlassRenderingSettings;
-	TWeakObjectPtr<ULookingGlassSceneCaptureComponent2D> LookingGlassCaptureComponent = LookingGlass::GetGameLookingGlassCaptureComponent();
+	TWeakObjectPtr<ULookingGlassCameraComponent> LookingGlassCaptureComponent = LookingGlass::GetActiveLookingGlassCamera();
 
 	// Find if we're recording the video, to override rendering mode
 	bool bIsRecordingMovie = (LookingGlass::GetMovieSceneCapture() != nullptr) || OnLookingGlassFrameReady.IsBound();
@@ -475,14 +475,14 @@ void FLookingGlassViewportClient::VisualizeRenderTarget(FViewport* InViewport, U
 	}
 }
 
-void FLookingGlassViewportClient::RenderToQuilt(ULookingGlassSceneCaptureComponent2D* CaptureComponent, UTextureRenderTarget2D* InQuiltRT)
+void FLookingGlassViewportClient::RenderToQuilt(ULookingGlassCameraComponent* LookingGlassCamera, UTextureRenderTarget2D* InQuiltRT)
 {
 	// Render to multiple render targets
-	CaptureComponent->RenderViews();
+	LookingGlassCamera->RenderViews();
 
 	// Copy data from multiple render targets into a single quilt image
 	uint32 CurrentViewIndex = 0;
-	for (const FLookingGlassRenderingConfig& RenderingConfig : CaptureComponent->GetRenderingConfigs().Configs)
+	for (const FLookingGlassRenderingConfig& RenderingConfig : LookingGlassCamera->GetRenderingConfigs().Configs)
 	{
 		UTextureRenderTarget2D* RenderTarget = RenderingConfig.GetRenderTarget();
 		if (RenderTarget == nullptr || RenderTarget->GetResource() == nullptr)
@@ -497,7 +497,7 @@ void FLookingGlassViewportClient::RenderToQuilt(ULookingGlassSceneCaptureCompone
 			LookingGlass::FCopyToQuiltRenderContext RenderContext =
 			{
 				InQuiltRT->GameThread_GetRenderTargetResource(),
-				CaptureComponent->GetTilingValues(),
+				LookingGlassCamera->GetTilingValues(),
 				RenderTarget->GetResource(),
 				CurrentViewIndex,
 				ViewIndex,
@@ -798,7 +798,7 @@ void FLookingGlassViewportClient::ProcessQuiltForMovie(UTextureRenderTarget2D* I
 	}
 }
 
-void FLookingGlassViewportClient::ProcessScreenshot2D(TWeakObjectPtr<ULookingGlassSceneCaptureComponent2D> LookingGlassCaptureComponent)
+void FLookingGlassViewportClient::ProcessScreenshot2D(TWeakObjectPtr<ULookingGlassCameraComponent> LookingGlassCaptureComponent)
 {
 	if (LookingGlassScreenshot2DRequest.IsValid())
 	{
@@ -958,11 +958,11 @@ bool FLookingGlassViewportClient::HandleScreenshot2DCommand(const TCHAR * Cmd, F
 
 bool FLookingGlassViewportClient::HandleTillingCommand(const TCHAR* Cmd, FOutputDevice& Ar)
 {
-	ULookingGlassSceneCaptureComponent2D* GameLookingGlassCaptureComponent = LookingGlass::GetGameLookingGlassCaptureComponent().Get();
+	ULookingGlassCameraComponent* GameLookingGlassCaptureComponent = LookingGlass::GetActiveLookingGlassCamera().Get();
 
 	if (GameLookingGlassCaptureComponent == nullptr)
 	{
-		UE_LOG(LookingGlassLogInput, Verbose, TEXT(">> LookingGlassCaptureComponent is not valid"));
+		UE_LOG(LookingGlassLogInput, Verbose, TEXT(">> LookingGlassCamera is not valid"));
 		return false;
 	}
 
@@ -1063,8 +1063,8 @@ bool FLookingGlassViewportClient::PrepareScreenshotQuilt(const FString& FileName
 
 		if (bAddFilenameSuffix)
 		{
-			// Get the LookingGlass component to see its tiling settings
-			TWeakObjectPtr<ULookingGlassSceneCaptureComponent2D> LookingGlassCaptureComponent = LookingGlass::GetGameLookingGlassCaptureComponent();
+			// Get the LookingGlass camera to see its tiling settings
+			TWeakObjectPtr<ULookingGlassCameraComponent> LookingGlassCaptureComponent = LookingGlass::GetActiveLookingGlassCamera();
 			if (LookingGlassCaptureComponent.IsValid())
 			{
 				const FLookingGlassTilingQuality& TilingValues = LookingGlassCaptureComponent->GetTilingValues();
@@ -1095,7 +1095,7 @@ bool FLookingGlassViewportClient::PrepareScreenshot2D(const FString& FileName, b
 	return false;
 }
 
-UTextureRenderTarget2D* FLookingGlassViewportClient::GetQuiltRT(TWeakObjectPtr<ULookingGlassSceneCaptureComponent2D> LookingGlassCaptureComponent)
+UTextureRenderTarget2D* FLookingGlassViewportClient::GetQuiltRT(TWeakObjectPtr<ULookingGlassCameraComponent> LookingGlassCaptureComponent)
 {
 	const FLookingGlassTilingQuality& TilingValues = LookingGlassCaptureComponent->GetTilingValues();
 
