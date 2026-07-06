@@ -600,6 +600,11 @@ void ULookingGlassCameraComponent::ResetGlobalTilingProperties()
 	UpdateTilingPropertiesForAllComponents();
 }
 
+float ULookingGlassCameraComponent::GetDeviceViewCone()
+{
+	return ILookingGlassRuntime::Get().GetCurrentCalibration().ViewCone;
+}
+
 ELookingGlassQualitySettings ULookingGlassCameraComponent::GetAutomaticTilingQuality()
 {
 	const FLGDeviceCalibration& Calibration = ILookingGlassRuntime::Get().GetCurrentCalibration();

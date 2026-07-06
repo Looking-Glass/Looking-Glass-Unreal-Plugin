@@ -125,6 +125,10 @@ public:
 
 	static void ResetGlobalTilingProperties();
 
+	// View cone angle (degrees) of the currently connected Looking Glass device, or 0 when unknown.
+	// Exposed here because the device calibration struct lives in a module-private header.
+	static float GetDeviceViewCone();
+
 	// The internal scene capture component used for quilt rendering. Created on demand.
 	ULookingGlassSceneCaptureComponent2D* GetCaptureDriver() const { return CaptureDriver; }
 

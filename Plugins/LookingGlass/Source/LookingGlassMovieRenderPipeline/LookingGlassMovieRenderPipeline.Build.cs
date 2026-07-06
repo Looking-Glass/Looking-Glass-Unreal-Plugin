@@ -28,6 +28,7 @@ namespace UnrealBuildTool.Rules
                     "RenderCore",
                     "RHI",
                     "Renderer",
+                    "ImageWriteQueue",
                     "LookingGlassRuntime",
                 }
                 );
