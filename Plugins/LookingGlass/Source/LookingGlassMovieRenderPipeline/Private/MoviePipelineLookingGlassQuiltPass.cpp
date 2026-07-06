@@ -374,6 +374,10 @@ void UMoviePipelineLookingGlassQuiltPass::RenderSample_GameThreadImpl(const FMov
 		{
 			RenderTileView(World, Camera, TileIndex, NumTiles, EffectiveViewCone, bPathTracing);
 			CopyTileToQuilt(TilingValues, TileIndex);
+
+			// Drain the render thread once per tile: with many tiles and many Path Tracer samples
+			// per tile, letting all scene renders of a frame queue up unthrottled can exhaust memory
+			FlushRenderingCommands();
 		}
 	}
 	else
