@@ -25,6 +25,9 @@ class ULookingGlassCameraComponent;
  * process settings, hidden/show-only lists, render target) which the low-level rendering code needs.
  *
  * It is created automatically by ULookingGlassCameraComponent - do not add it to actors manually.
+ * For content saved with older plugin versions which used this component directly (without the
+ * LookingGlassCapture actor), OnRegister creates a transient ULookingGlassCameraComponent from the
+ * legacy settings so such setups keep rendering; users should still migrate to the camera component.
  */
 UCLASS(hidecategories = (Collision, Object, Physics, SceneComponent, Projection), ClassGroup = Rendering, meta = (DisplayName = "Looking Glass Capture Driver (internal)"))
 class LOOKINGGLASSRUNTIME_API ULookingGlassSceneCaptureComponent2D : public USceneCaptureComponent2D
@@ -42,6 +45,8 @@ public:
 	}
 
 	virtual void OnRegister() override;
+
+	virtual void OnComponentDestroyed(bool bDestroyingHierarchy) override;
 	//~ End UActorComponent Interface
 
 	//~ Begin USceneCaptureComponent Interface
@@ -132,4 +137,8 @@ public:
 private:
 	// Flag telling that UpdateSceneCaptureContents() should pass execution to parent class
 	bool bAllow2DCapture = false;
+
+	/** Transient camera auto-created by OnRegister for legacy standalone usage of this component */
+	UPROPERTY(Transient)
+	ULookingGlassCameraComponent* LegacyOwnerCamera = nullptr;
 };

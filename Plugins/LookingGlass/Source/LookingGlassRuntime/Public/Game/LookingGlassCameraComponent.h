@@ -22,12 +22,14 @@ class ULookingGlassSceneCaptureComponent2D;
 /**
  * The Looking Glass camera. This is the user-facing component of the plugin: it inherits from
  * UCameraComponent, so it supports all conventional camera workflows - possessing it from a
- * Camera Cuts track, piloting it in the viewport, animating transform and FieldOfView in
- * Sequencer, and rendering through Movie Render Queue (including Path Tracing).
+ * Camera Cuts track, piloting it in the viewport, and animating transform and FieldOfView in
+ * Sequencer. Movie Render Queue (including Path Tracing) can render through it like through any
+ * other camera; note that MRQ currently outputs the standard single camera view, not the quilt.
  *
  * The Looking Glass quilt (multi-view) rendering is performed through an internal, transient
  * ULookingGlassSceneCaptureComponent2D "capture driver" which this component creates and keeps
- * in sync with the camera settings.
+ * in sync with the camera settings. Rendering quilts through Movie Render Queue itself is a
+ * planned follow-up; see the todo on RenderViews() for the intended integration point.
  */
 UCLASS(ClassGroup = Rendering, editinlinenew, meta = (BlueprintSpawnableComponent, DisplayName = "Looking Glass Camera"), hidecategories = (Collision, Object, Physics))
 class LOOKINGGLASSRUNTIME_API ULookingGlassCameraComponent : public UCameraComponent
@@ -108,6 +110,10 @@ public:
 
 	// The internal scene capture component used for quilt rendering. Created on demand.
 	ULookingGlassSceneCaptureComponent2D* GetCaptureDriver() const { return CaptureDriver; }
+
+	// Explicitly assign the capture driver. Used by the legacy standalone
+	// ULookingGlassSceneCaptureComponent2D auto-migration (see its OnRegister).
+	void SetCaptureDriver(ULookingGlassSceneCaptureComponent2D* InDriver) { CaptureDriver = InDriver; }
 
 public:
 	// Vertical size of the capture region in Unreal units (cm)
@@ -248,8 +254,8 @@ private:
 	// Push all camera-derived settings (post processing, show flags) into CaptureDriver before rendering
 	void SetupCaptureDriver();
 
-	// Update DOF-related overrides in our PostProcessSettings
-	void ApplyDOFPostProcessSettings();
+	// Apply the Looking Glass DOF override to a copy of the camera post process settings
+	void ApplyDOFPostProcessSettings(FPostProcessSettings& InOutSettings) const;
 
 	/**
 	 * Generates a projection matrix

@@ -284,11 +284,21 @@ void ULookingGlassCameraComponent::EndPlay(const EEndPlayReason::Type EndPlayRea
 
 void ULookingGlassCameraComponent::GetCameraView(float DeltaTime, FMinimalViewInfo& DesiredView)
 {
-	// Keep DOF override settings up to date, so piloting the camera / rendering with Movie Render
-	// Queue shows the same depth of field as the hologram
-	ApplyDOFPostProcessSettings();
-
 	Super::GetCameraView(DeltaTime, DesiredView);
+
+	// Apply the Looking Glass DOF override to the resulting view only. The component's stored
+	// PostProcessSettings are never touched, so ordinary camera DOF setups (Sequencer, Movie
+	// Render Queue) keep working when bOverrideDOF is disabled.
+	if (bOverrideDOF)
+	{
+		if (DesiredView.PostProcessBlendWeight <= 0.f)
+		{
+			// Camera post processing is turned off; enable it just for the DOF override
+			DesiredView.PostProcessSettings = PostProcessSettings;
+			DesiredView.PostProcessBlendWeight = 1.0f;
+		}
+		ApplyDOFPostProcessSettings(DesiredView.PostProcessSettings);
+	}
 }
 
 /**
@@ -629,25 +639,15 @@ ELookingGlassQualitySettings ULookingGlassCameraComponent::GetAutomaticTilingQua
 	return ELookingGlassQualitySettings::Q_Portrait;
 }
 
-void ULookingGlassCameraComponent::ApplyDOFPostProcessSettings()
+// Apply the "focus on the hologram plane" DOF override to the given post process settings. Only
+// called when bOverrideDOF is enabled, and always works on a copy of the camera settings (the view
+// or the capture driver), never on the component's own PostProcessSettings.
+void ULookingGlassCameraComponent::ApplyDOFPostProcessSettings(FPostProcessSettings& InOutSettings) const
 {
-	if (bOverrideDOF)
-	{
-		// Focus Depth of Field effect on target point
-		PostProcessSettings.bOverride_DepthOfFieldFocalDistance = true;
-		PostProcessSettings.DepthOfFieldFocalDistance = GetCameraDistance() + DOFAdjust;
-		PostProcessSettings.bOverride_DepthOfFieldFstop = true;
-		PostProcessSettings.DepthOfFieldFstop = DepthOfFieldFstop;
-	}
-	else
-	{
-		// Reset Depth of Field overrides. Note: unlike the older SceneCapture-based implementation we
-		// do not zero PostProcessBlendWeight here, so any other post process settings the user sets up
-		// on the camera are inherited by both the camera view and the hologram rendering.
-		PostProcessSettings.bOverride_DepthOfFieldFocalDistance = false;
-		PostProcessSettings.DepthOfFieldFocalDistance = 0;
-		PostProcessSettings.bOverride_DepthOfFieldFstop = false;
-	}
+	InOutSettings.bOverride_DepthOfFieldFocalDistance = true;
+	InOutSettings.DepthOfFieldFocalDistance = GetCameraDistance() + DOFAdjust;
+	InOutSettings.bOverride_DepthOfFieldFstop = true;
+	InOutSettings.DepthOfFieldFstop = DepthOfFieldFstop;
 }
 
 void ULookingGlassCameraComponent::SetupCaptureDriver()
@@ -658,11 +658,18 @@ void ULookingGlassCameraComponent::SetupCaptureDriver()
 		return;
 	}
 
-	ApplyDOFPostProcessSettings();
-
-	// The hologram rendering inherits the camera's post processing setup
+	// The hologram rendering inherits the camera's post processing setup; the Looking Glass DOF
+	// override is applied to the capture driver's copy only
 	CaptureDriver->PostProcessSettings = PostProcessSettings;
 	CaptureDriver->PostProcessBlendWeight = PostProcessBlendWeight;
+	if (bOverrideDOF)
+	{
+		ApplyDOFPostProcessSettings(CaptureDriver->PostProcessSettings);
+		if (CaptureDriver->PostProcessBlendWeight <= 0.f)
+		{
+			CaptureDriver->PostProcessBlendWeight = 1.0f;
+		}
+	}
 
 	FEngineShowFlags& CaptureShowFlags = CaptureDriver->ShowFlags;
 	CaptureShowFlags.EnableAdvancedFeatures();
@@ -678,6 +685,10 @@ void ULookingGlassCameraComponent::SetupCaptureDriver()
 }
 
 // Called by LookingGlassViewportClient used for capturing new snapshot of scene from the camera
+//todo: Movie Render Queue integration. To render quilts through MRQ (with its high-quality /
+// Path Tracing pipelines), add an MRQ setting or render pass which calls RenderViews() (or walks
+// RenderingConfigs and submits each view through MRQ's renderer) once per output frame, then
+// composites the tiles into a quilt the same way FLookingGlassViewportClient::RenderToQuilt does.
 void ULookingGlassCameraComponent::RenderViews()
 {
 	SetupCaptureDriver();

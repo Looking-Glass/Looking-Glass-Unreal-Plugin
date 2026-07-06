@@ -32,7 +32,8 @@ public:
 	virtual void PostLoad() override;
 
 	// The user-facing camera of this actor. Being a regular UCameraComponent subclass, it can be
-	// bound to Camera Cuts tracks, piloted in the viewport and rendered through Movie Render Queue.
+	// bound to Camera Cuts tracks, piloted in the viewport and used with Movie Render Queue like
+	// any other camera (MRQ outputs the standard camera view; quilt output is a planned follow-up).
 	ULookingGlassCameraComponent* GetLookingGlassCamera() const { return LookingGlassCamera; }
 
 protected:
