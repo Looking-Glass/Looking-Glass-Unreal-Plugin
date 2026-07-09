@@ -72,9 +72,17 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Quilt Settings")
 	bool bUsePathTracing = true;
 
-	/** Number of Path Tracer samples accumulated per tile view. Higher is cleaner and slower. */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Quilt Settings", meta = (EditCondition = "bUsePathTracing", ClampMin = "1", UIMin = "1", UIMax = "4096"))
-	int32 PathTracerSamplesPerView = 64;
+	/** Number of Path Tracer samples accumulated per tile view. Total work is this value multiplied by the quilt tile count. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Quilt Settings|Path Tracing", meta = (EditCondition = "bUsePathTracing", ClampMin = "1", UIMin = "1", UIMax = "256"))
+	int32 PathTracerSamplesPerView = 8;
+
+	/** Run the Path Tracer denoiser on the completed tile. Disabled by default because quilts render many small views and denoising each tile is expensive. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Quilt Settings|Path Tracing", meta = (EditCondition = "bUsePathTracing"))
+	bool bUsePathTracerDenoiser = false;
+
+	/** Wait for the render thread after each Path Tracer sample to avoid queuing too much ray tracing work at once. Slower, but much less likely to trigger GPU device resets. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Quilt Settings|Path Tracing", meta = (EditCondition = "bUsePathTracing"))
+	bool bFlushAfterEachPathTracerSample = true;
 
 	/** When a Looking Glass device is connected, use its calibrated view cone angle. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Quilt Settings")
@@ -123,4 +131,7 @@ private:
 
 	/** Whether a "no camera found" error was already logged (log once per job, render black frames) */
 	bool bLoggedMissingCamera = false;
+
+	/** Whether the path tracing workload warning has already been logged */
+	bool bLoggedPathTracingWorkload = false;
 };

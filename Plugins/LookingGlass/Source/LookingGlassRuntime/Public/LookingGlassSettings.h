@@ -219,7 +219,7 @@ struct FLookingGlassScreenshotSettings
 
 	// Resolution of the generated image file
 	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category = "LookingGlass|Screenshot Settings", Meta = (EditCondition = "bResolutionVisible", HideEditConditionToggle, EditConditionHides, ClampMin = "0", ClampMax = "10000", UIMin = "0", UIMax = "10000"))
-	FIntPoint Resolution;
+	FIntPoint Resolution = FIntPoint::ZeroValue;
 
 	// Hidden property used to control visibility of "Resolution" property
 	UPROPERTY()

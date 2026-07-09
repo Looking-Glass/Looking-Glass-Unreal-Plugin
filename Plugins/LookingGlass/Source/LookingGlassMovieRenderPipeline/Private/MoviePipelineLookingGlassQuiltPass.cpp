@@ -40,6 +40,7 @@ void UMoviePipelineLookingGlassQuiltPass::SetupImpl(const MoviePipeline::FMovieP
 	Super::SetupImpl(InPassInitSettings);
 
 	bLoggedMissingCamera = false;
+	bLoggedPathTracingWorkload = false;
 }
 
 void UMoviePipelineLookingGlassQuiltPass::TeardownImpl()
@@ -227,9 +228,16 @@ void UMoviePipelineLookingGlassQuiltPass::RenderTileView(UWorld* World, ULooking
 
 		FSceneView* View = new FSceneView(ViewInitOptions);
 		View->bIsOfflineRender = true;
-		// Reset Path Tracer accumulation (and other history) on the first sample of each frame;
-		// subsequent samples of the same, unchanged view accumulate on top
-		View->bCameraCut = (SampleIndex == 0);
+		if (bPathTracing)
+		{
+			// Match MRQ's Path Tracer behavior: explicitly reset the Path Tracer accumulation
+			// on the first sample, then let subsequent renders build on the same view state.
+			View->bForcePathTracerReset = (SampleIndex == 0);
+		}
+		else
+		{
+			View->bCameraCut = true;
+		}
 		ViewFamily.Views.Add(View);
 
 		View->StartFinalPostprocessSettings(ViewLocation);
@@ -239,14 +247,22 @@ void UMoviePipelineLookingGlassQuiltPass::RenderTileView(UWorld* World, ULooking
 		if (bPathTracing)
 		{
 			// Offline-marked views take their Path Tracer sample target from the final post process
-			// settings (not from r.PathTracing.SamplesPerPixel). Write it after all blending so the
-			// value is exact: the Path Tracer accumulates across our repeated renders (through the
-			// persistent per-tile view state) until this target is reached.
+			// settings (not from r.PathTracing.SamplesPerPixel). Override it after all blending so the
+			// value is exact. The Path Tracer accumulates across repeated renders through the
+			// persistent per-tile view state until this target is reached.
+			View->FinalPostProcessSettings.bOverride_PathTracingSamplesPerPixel = true;
 			View->FinalPostProcessSettings.PathTracingSamplesPerPixel = FMath::Max(1, PathTracerSamplesPerView);
+			View->FinalPostProcessSettings.bOverride_PathTracingEnableDenoiser = true;
+			View->FinalPostProcessSettings.PathTracingEnableDenoiser = bUsePathTracerDenoiser;
 		}
 
 		FCanvas Canvas(RTResource, nullptr, GameTime, World->Scene->GetFeatureLevel());
 		GetRendererModule().BeginRenderingViewFamily(&Canvas, &ViewFamily);
+
+		if (bPathTracing && bFlushAfterEachPathTracerSample)
+		{
+			FlushRenderingCommands();
+		}
 	}
 }
 
@@ -394,6 +410,18 @@ void UMoviePipelineLookingGlassQuiltPass::RenderSample_GameThreadImpl(const FMov
 	World->SendAllEndOfFrameUpdates();
 
 	const int32 NumTiles = TilingValues.GetNumTiles();
+	if (bPathTracing && !bLoggedPathTracingWorkload)
+	{
+		const int32 SamplesPerTile = FMath::Max(1, PathTracerSamplesPerView);
+		UE_LOG(LogMovieRenderPipeline, Warning, TEXT("LookingGlassQuilt: Path Tracing %d quilt tiles at %dx%d, %d sample(s) per tile (%d total path-traced submissions per output frame). Lower PathTracerSamplesPerView or use a smaller tiling preset if the GPU resets."),
+			NumTiles,
+			TilingValues.TileSizeX,
+			TilingValues.TileSizeY,
+			SamplesPerTile,
+			NumTiles * SamplesPerTile);
+		bLoggedPathTracingWorkload = true;
+	}
+
 	for (int32 TileIndex = 0; TileIndex < NumTiles; ++TileIndex)
 	{
 		RenderTileView(World, Camera, TileIndex, NumTiles, EffectiveViewCone, bPathTracing);

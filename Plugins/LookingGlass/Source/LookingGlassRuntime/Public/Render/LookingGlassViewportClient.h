@@ -404,6 +404,8 @@ private:
 
 	UTextureRenderTarget2D* GetQuiltRT(TWeakObjectPtr<ULookingGlassCameraComponent> LookingGlassCamera);
 
+	void ReleaseQuiltRT();
+
 	void SaveScreenShot(const TArray<FColor>& Bitmap, const FIntVector& Size, const FString& ScreenShotName, const FLookingGlassScreenshotSettings* pScreenShotSettings);
 
 #if WITH_EDITOR

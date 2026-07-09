@@ -119,6 +119,11 @@ void FLookingGlassRuntimeModule::OnDisplayMetricsChanged(const FDisplayMetrics& 
 
 void FLookingGlassRuntimeModule::PrepareDisplays()
 {
+	if (!Bridge.bInitialized)
+	{
+		Bridge.Initialize();
+	}
+
 	Bridge.ReadDisplays();
 }
 
@@ -157,6 +162,11 @@ void FLookingGlassRuntimeModule::StartPlayer(ELookingGlassModeType LookingGlassM
 	}
 
 	PrepareDisplays();
+
+	if (Bridge.bInitialized)
+	{
+		Bridge.StopRendering();
+	}
 
 	bIsRenderingOnDevice = true;
 
@@ -432,6 +442,11 @@ void FLookingGlassRuntimeModule::StopPlayer()
 
 	if (bIsPlaying == true)
 	{
+		if (Bridge.bInitialized)
+		{
+			Bridge.StopRendering();
+		}
+
 		// Stop all managers
 		for (auto Mng : Managers)
 		{
@@ -488,6 +503,13 @@ void FLookingGlassRuntimeModule::StopPlayer()
 		}
 		default:
 			return;
+		}
+
+		if (Bridge.bInitialized)
+		{
+			// Bridge exposes no destroy-window API. Fully reset it between PIE sessions so
+			// stale hidden windows and DX registrations cannot poison the next playback.
+			Bridge.Shutdown();
 		}
 
 		bIsPlaying = false;

@@ -42,6 +42,22 @@ Alternatively you may get the snapshot of the repository using downloading of zi
 
 ![](https://github.com/Looking-Glass/Looking-Glass-Unreal-Plugin/blob/main/docs/docs-divider-gradient-stroke.png)
 
+## Movie Render Queue quilt rendering
+
+The plugin includes a Movie Render Queue render pass for outputting Looking Glass quilts from a `Looking Glass Camera`.
+
+- Add a Looking Glass camera or capture actor to your sequence and bind it in the Camera Cuts track.
+- In Movie Render Queue, choose `+ Setting > Rendering > Looking Glass Quilt`.
+- Remove or disable `Deferred Rendering` unless you also want a regular 2D render.
+- Set the MRQ output resolution to match the selected quilt preset. For example, Looking Glass Go uses `4092 x 4092`.
+- The render pass output identifier is `LookingGlassQuilt`, so `{render_pass}` resolves to that name in MRQ output paths.
+
+Path Tracing is supported by the Looking Glass Quilt pass. In Unreal Engine 5.5 on Windows, Path Tracing requires DirectX 12, SM6 shader formats, Support Hardware Ray Tracing, Path Tracing, and Compute Skin Cache if Unreal prompts for it. The pass defaults to 8 path-traced samples per quilt tile because total work is `tile count x samples per tile`; increasing this value can be very expensive on GPU memory and driver stability.
+
+MRQ anti-aliasing spatial and temporal samples do not control this pass. Use `PathTracerSamplesPerView` in the Looking Glass Quilt settings for Path Tracing sample count.
+
+![](https://github.com/Looking-Glass/Looking-Glass-Unreal-Plugin/blob/main/docs/docs-divider-gradient-stroke.png)
+
 ## How to package the plugin
 
 Packaging is needed for plugin's distribution accross different machines, e.g. providing builds over the Internet. The easiest way to package is to run `BuildPlugin.bat` file in the root folder of the project. This file will build and package the plugin for multiple engine versions, so if you don't need that - you may customize it to work with the version you needed.

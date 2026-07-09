@@ -154,12 +154,8 @@ FLookingGlassViewportClient::~FLookingGlassViewportClient()
 		FEditorSupportDelegates::RedrawAllViewports.RemoveAll(this);
 	}
 #endif
-	// Stop rendering, hide window
-	FLookingGlassBridge& Bridge = ILookingGlassRuntime::Get().GetBridge();
-	if (Bridge.bInitialized)
-	{
-		Bridge.StopRendering();
-	}
+
+	ReleaseQuiltRT();
 }
 
 #if WITH_EDITOR
@@ -435,7 +431,20 @@ void FLookingGlassViewportClient::VisualizeRenderTarget(FViewport* InViewport, U
 		// Prepare Bridge if needed
 		FLookingGlassBridge& Bridge = ILookingGlassRuntime::Get().GetBridge();
 #if 1
-		void* RTNativeHandle = RenderTarget->GetTexture2DRHI()->GetNativeResource();
+		FTextureRHIRef RenderTargetTexture = RenderTarget->GetRenderTargetTexture();
+		ENQUEUE_RENDER_COMMAND(PrepareQuiltRTForBridge)(
+			[RenderTargetTexture](FRHICommandListImmediate& RHICmdList)
+			{
+				RHICmdList.Transition(FRHITransitionInfo(RenderTargetTexture, ERHIAccess::Unknown, ERHIAccess::SRVMask));
+				RHICmdList.ImmediateFlush(EImmediateFlushType::FlushRHIThread);
+			});
+		FlushRenderingCommands();
+
+		void* RTNativeHandle = RenderTargetTexture->GetNativeResource();
+		if (RTNativeHandle == nullptr)
+		{
+			return;
+		}
 		if (!Bridge.IsRendering())
 		{
 			Bridge.StartRendering();
@@ -1124,4 +1133,17 @@ UTextureRenderTarget2D* FLookingGlassViewportClient::GetQuiltRT(TWeakObjectPtr<U
 	}
 
 	return StaticQuiltRT;
+}
+
+void FLookingGlassViewportClient::ReleaseQuiltRT()
+{
+	if (StaticQuiltRT == nullptr)
+	{
+		return;
+	}
+
+	StaticQuiltRT->ReleaseResource();
+	FlushRenderingCommands();
+	StaticQuiltRT->RemoveFromRoot();
+	StaticQuiltRT = nullptr;
 }
