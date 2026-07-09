@@ -291,13 +291,7 @@ void ULookingGlassCameraComponent::GetCameraView(float DeltaTime, FMinimalViewIn
 	// Render Queue) keep working when bOverrideDOF is disabled.
 	if (bOverrideDOF)
 	{
-		if (DesiredView.PostProcessBlendWeight <= 0.f)
-		{
-			// Camera post processing is turned off; enable it just for the DOF override
-			DesiredView.PostProcessSettings = PostProcessSettings;
-			DesiredView.PostProcessBlendWeight = 1.0f;
-		}
-		ApplyDOFPostProcessSettings(DesiredView.PostProcessSettings);
+		GetEffectivePostProcessSettings(DesiredView.PostProcessSettings, DesiredView.PostProcessBlendWeight);
 	}
 }
 
@@ -694,6 +688,21 @@ void ULookingGlassCameraComponent::ApplyDOFPostProcessSettings(FPostProcessSetti
 	InOutSettings.DepthOfFieldFstop = DepthOfFieldFstop;
 }
 
+void ULookingGlassCameraComponent::GetEffectivePostProcessSettings(FPostProcessSettings& OutSettings, float& OutBlendWeight) const
+{
+	OutSettings = PostProcessSettings;
+	OutBlendWeight = PostProcessBlendWeight;
+	if (bOverrideDOF)
+	{
+		ApplyDOFPostProcessSettings(OutSettings);
+		if (OutBlendWeight <= 0.f)
+		{
+			// Camera post processing is turned off; enable it just for the DOF override
+			OutBlendWeight = 1.0f;
+		}
+	}
+}
+
 void ULookingGlassCameraComponent::SetupCaptureDriver()
 {
 	EnsureCaptureDriver();
@@ -704,16 +713,7 @@ void ULookingGlassCameraComponent::SetupCaptureDriver()
 
 	// The hologram rendering inherits the camera's post processing setup; the Looking Glass DOF
 	// override is applied to the capture driver's copy only
-	CaptureDriver->PostProcessSettings = PostProcessSettings;
-	CaptureDriver->PostProcessBlendWeight = PostProcessBlendWeight;
-	if (bOverrideDOF)
-	{
-		ApplyDOFPostProcessSettings(CaptureDriver->PostProcessSettings);
-		if (CaptureDriver->PostProcessBlendWeight <= 0.f)
-		{
-			CaptureDriver->PostProcessBlendWeight = 1.0f;
-		}
-	}
+	GetEffectivePostProcessSettings(CaptureDriver->PostProcessSettings, CaptureDriver->PostProcessBlendWeight);
 
 	FEngineShowFlags& CaptureShowFlags = CaptureDriver->ShowFlags;
 	CaptureShowFlags.EnableAdvancedFeatures();

@@ -166,21 +166,11 @@ void UMoviePipelineLookingGlassQuiltPass::RenderTileView(UWorld* World, ULooking
 
 	FTextureRenderTargetResource* RTResource = TileRenderTarget->GameThread_GetRenderTargetResource();
 
-	// Post processing: the camera's own settings plus the LookingGlass DOF override, mirroring
-	// ULookingGlassCameraComponent::SetupCaptureDriver
-	FPostProcessSettings PPSettings = Camera->PostProcessSettings;
-	float PPWeight = Camera->PostProcessBlendWeight;
-	if (Camera->bOverrideDOF)
-	{
-		PPSettings.bOverride_DepthOfFieldFocalDistance = true;
-		PPSettings.DepthOfFieldFocalDistance = Camera->GetCameraDistance() + Camera->DOFAdjust;
-		PPSettings.bOverride_DepthOfFieldFstop = true;
-		PPSettings.DepthOfFieldFstop = Camera->DepthOfFieldFstop;
-		if (PPWeight <= 0.f)
-		{
-			PPWeight = 1.0f;
-		}
-	}
+	// Post processing: the camera's own settings plus the LookingGlass DOF override. Shared with the
+	// realtime capture-driver path so the hologram and the MRQ quilt render identically.
+	FPostProcessSettings PPSettings;
+	float PPWeight;
+	Camera->GetEffectivePostProcessSettings(PPSettings, PPWeight);
 
 	// The Path Tracer accumulates one sample batch per submitted render; repeat the render until
 	// the requested per-view sample count has been reached. For the raster fallback a single

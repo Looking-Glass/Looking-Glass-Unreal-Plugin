@@ -119,6 +119,15 @@ public:
 	 */
 	void ComputeViewInfo(int32 ViewIndex, int32 NumTiles, float ViewConeDegrees, FVector& OutViewLocation, FMatrix& OutViewRotationMatrix, FMatrix& OutProjectionMatrix) const;
 
+	/**
+	 * Fill OutSettings/OutBlendWeight with the post process settings a Looking Glass render should
+	 * use: the camera's own settings, plus the "focus on the hologram plane" DOF override when
+	 * bOverrideDOF is enabled (which also forces a non-zero blend weight so the override takes
+	 * effect). Shared by the realtime capture-driver path and the Movie Render Queue quilt pass so
+	 * both stay identical.
+	 */
+	void GetEffectivePostProcessSettings(FPostProcessSettings& OutSettings, float& OutBlendWeight) const;
+
 	const FLookingGlassRenderingConfigs& GetRenderingConfigs() const { return RenderingConfigs; }
 
 	static void SetGlobalTilingProperties(ELookingGlassQualitySettings InTilingQuailty);
