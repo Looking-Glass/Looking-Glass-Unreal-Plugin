@@ -18,13 +18,14 @@
 #include "EngineModule.h" // for GetRendererModule()
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/WorldSettings.h"
+#include "HAL/IConsoleManager.h"
 #include "ImagePixelData.h"
 #include "LegacyScreenPercentageDriver.h"
-#include "Misc/App.h"
 #include "RenderingThread.h"
 #include "RenderUtils.h" // for IsRayTracingEnabled()
 #include "RHI.h"
 #include "SceneInterface.h"
+#include "SceneManagement.h"
 #include "SceneView.h"
 #include "TextureResource.h"
 
@@ -45,19 +46,26 @@ void UMoviePipelineLookingGlassQuiltPass::SetupImpl(const MoviePipeline::FMovieP
 
 void UMoviePipelineLookingGlassQuiltPass::TeardownImpl()
 {
-	// Make sure no in-flight rendering still references our view states or render targets
-	FlushRenderingCommands();
-
-	for (FSceneViewStateReference& ViewState : TileViewStates)
-	{
-		ViewState.Destroy();
-	}
-	TileViewStates.Empty();
+	DestroyViewStates();
 
 	QuiltRenderTarget = nullptr;
 	TileRenderTarget = nullptr;
 
 	Super::TeardownImpl();
+}
+
+void UMoviePipelineLookingGlassQuiltPass::AddReferencedObjects(UObject* InThis, FReferenceCollector& Collector)
+{
+	Super::AddReferencedObjects(InThis, Collector);
+
+	UMoviePipelineLookingGlassQuiltPass& This = *CastChecked<UMoviePipelineLookingGlassQuiltPass>(InThis);
+	for (FSceneViewStateReference& ViewState : This.TileViewStates)
+	{
+		if (FSceneViewStateInterface* ViewStateInterface = ViewState.GetReference())
+		{
+			ViewStateInterface->AddReferencedObjects(Collector);
+		}
+	}
 }
 
 void UMoviePipelineLookingGlassQuiltPass::GatherOutputPassesImpl(TArray<FMoviePipelinePassIdentifier>& ExpectedRenderPasses)
@@ -134,22 +142,36 @@ void UMoviePipelineLookingGlassQuiltPass::EnsureRenderTargets(const FLookingGlas
 	}
 }
 
-void UMoviePipelineLookingGlassQuiltPass::EnsureViewStates(const FLookingGlassTilingQuality& TilingValues, UWorld* World)
+void UMoviePipelineLookingGlassQuiltPass::DestroyViewStates()
 {
-	// One persistent view state per tile: the Path Tracer accumulates its samples in the view
-	// state, and eye adaptation history lives there as well
-	const int32 NumTiles = TilingValues.GetNumTiles();
-	if (TileViewStates.Num() != NumTiles)
+	// Make sure no in-flight rendering still references the states or their material instances.
+	FlushRenderingCommands();
+
+	for (FSceneViewStateReference& ViewState : TileViewStates)
 	{
-		FlushRenderingCommands();
-		for (FSceneViewStateReference& ViewState : TileViewStates)
+		if (FSceneViewStateInterface* ViewStateInterface = ViewState.GetReference())
 		{
-			ViewState.Destroy();
+			ViewStateInterface->ClearMIDPool();
 		}
-		TileViewStates.Empty(NumTiles);
+		ViewState.Destroy();
+	}
+	TileViewStates.Empty();
+}
+
+void UMoviePipelineLookingGlassQuiltPass::EnsureViewStates(const FLookingGlassTilingQuality& TilingValues, UWorld* World, bool bPathTracing)
+{
+	// A Path Tracer state retains several full-resolution accumulation textures. Tiles are rendered
+	// serially, so one shared state can be reset and reused. Its non-resetting Path Tracer frame index
+	// also gives each tile a different temporal ray sequence. Raster views keep separate histories
+	// so eye adaptation remains stable per view.
+	const int32 NumViewStates = bPathTracing ? 1 : TilingValues.GetNumTiles();
+	if (TileViewStates.Num() != NumViewStates)
+	{
+		DestroyViewStates();
+		TileViewStates.Empty(NumViewStates);
 
 		const ERHIFeatureLevel::Type FeatureLevel = World->Scene->GetFeatureLevel();
-		for (int32 Index = 0; Index < NumTiles; ++Index)
+		for (int32 Index = 0; Index < NumViewStates; ++Index)
 		{
 			FSceneViewStateReference& ViewState = TileViewStates.AddDefaulted_GetRef();
 			ViewState.Allocate(FeatureLevel);
@@ -157,11 +179,14 @@ void UMoviePipelineLookingGlassQuiltPass::EnsureViewStates(const FLookingGlassTi
 	}
 }
 
-void UMoviePipelineLookingGlassQuiltPass::RenderTileView(UWorld* World, ULookingGlassCameraComponent* Camera, int32 TileIndex, int32 NumTiles, float ViewConeDegrees, bool bPathTracing)
+void UMoviePipelineLookingGlassQuiltPass::RenderTileView(UWorld* World, ULookingGlassCameraComponent* Camera, int32 TileIndex, int32 NumTiles, float ViewConeDegrees,
+	bool bPathTracing, const FGameTime& GameTime, bool bWorldIsPaused)
 {
 	FVector ViewLocation;
 	FMatrix ViewRotationMatrix;
 	FMatrix ProjectionMatrix;
+	// Projection intentionally uses the camera/display optical aspect. The physical quilt tile can
+	// have a different pixel aspect; CopyTileToQuilt packs (and may scale) the rendered view into it.
 	Camera->ComputeViewInfo(TileIndex, NumTiles, ViewConeDegrees, ViewLocation, ViewRotationMatrix, ProjectionMatrix);
 
 	FTextureRenderTargetResource* RTResource = TileRenderTarget->GameThread_GetRenderTargetResource();
@@ -191,14 +216,13 @@ void UMoviePipelineLookingGlassQuiltPass::RenderTileView(UWorld* World, ULooking
 			ShowFlags.SetPathTracing(true);
 		}
 
-		FGameTime GameTime = FGameTime::CreateUndilated(FApp::GetCurrentTime() - GStartTime, FApp::GetDeltaTime());
-
 		FSceneViewFamilyContext ViewFamily(FSceneViewFamily::ConstructionValues(RTResource, World->Scene, ShowFlags)
 			.SetResolveScene(true)
-			.SetRealtimeUpdate(false)
+			.SetRealtimeUpdate(true)
 			.SetTime(GameTime));
 
 		ViewFamily.SceneCaptureSource = SCS_FinalColorLDR;
+		ViewFamily.bWorldIsPaused = bWorldIsPaused;
 		ViewFamily.EngineShowFlags.ScreenPercentage = false;
 		ViewFamily.SetScreenPercentageInterface(new FLegacyScreenPercentageDriver(ViewFamily, 1.0f, false));
 
@@ -209,7 +233,9 @@ void UMoviePipelineLookingGlassQuiltPass::RenderTileView(UWorld* World, ULooking
 		ViewInitOptions.ViewRotationMatrix = ViewRotationMatrix;
 		ViewInitOptions.ProjectionMatrix = ProjectionMatrix;
 		ViewInitOptions.ViewActor = Camera->GetOwner();
-		ViewInitOptions.SceneViewStateInterface = TileViewStates[TileIndex].GetReference();
+		const int32 ViewStateIndex = bPathTracing ? 0 : TileIndex;
+		check(TileViewStates.IsValidIndex(ViewStateIndex));
+		ViewInitOptions.SceneViewStateInterface = TileViewStates[ViewStateIndex].GetReference();
 		ViewInitOptions.BackgroundColor = FLinearColor::Black;
 		if (World->GetWorldSettings() != nullptr)
 		{
@@ -220,9 +246,12 @@ void UMoviePipelineLookingGlassQuiltPass::RenderTileView(UWorld* World, ULooking
 		View->bIsOfflineRender = true;
 		if (bPathTracing)
 		{
-			// Match MRQ's Path Tracer behavior: explicitly reset the Path Tracer accumulation
-			// on the first sample, then let subsequent renders build on the same view state.
-			View->bForcePathTracerReset = (SampleIndex == 0);
+			// Reset accumulation and denoiser history for each camera view. UE intentionally leaves the
+			// Path Tracer frame index untouched, so the shared state advances to a decorrelated temporal
+			// ray sequence for the next quilt view while SampleIndex starts over at zero.
+			const bool bFirstSample = SampleIndex == 0;
+			View->bForcePathTracerReset = bFirstSample;
+			View->bCameraCut = bFirstSample;
 		}
 		else
 		{
@@ -239,7 +268,7 @@ void UMoviePipelineLookingGlassQuiltPass::RenderTileView(UWorld* World, ULooking
 			// Offline-marked views take their Path Tracer sample target from the final post process
 			// settings (not from r.PathTracing.SamplesPerPixel). Override it after all blending so the
 			// value is exact. The Path Tracer accumulates across repeated renders through the
-			// persistent per-tile view state until this target is reached.
+			// shared persistent view state until this target is reached.
 			View->FinalPostProcessSettings.bOverride_PathTracingSamplesPerPixel = true;
 			View->FinalPostProcessSettings.PathTracingSamplesPerPixel = FMath::Max(1, PathTracerSamplesPerView);
 			View->FinalPostProcessSettings.bOverride_PathTracingEnableDenoiser = true;
@@ -371,7 +400,20 @@ void UMoviePipelineLookingGlassQuiltPass::RenderSample_GameThreadImpl(const FMov
 		return;
 	}
 
-	EnsureViewStates(TilingValues, World);
+	// Path tracing needs both ray tracing and path tracing support on the active shader platform;
+	// with only the former, the renderer would silently draw without the path tracer.
+	IConsoleVariable* PathTracingCVar = IConsoleManager::Get().FindConsoleVariable(TEXT("r.PathTracing"));
+	const bool bPathTracing = bUsePathTracing
+		&& IsRayTracingEnabled()
+		&& PathTracingCVar != nullptr
+		&& PathTracingCVar->GetInt() != 0
+		&& FDataDrivenShaderPlatformInfo::GetSupportsPathTracing(World->Scene->GetShaderPlatform());
+	if (bUsePathTracing && !bPathTracing)
+	{
+		UE_LOG(LogMovieRenderPipeline, Warning, TEXT("LookingGlassQuilt: Path Tracing requested but ray tracing/path tracing is not enabled or not supported on this platform; falling back to the deferred renderer"));
+	}
+
+	EnsureViewStates(TilingValues, World, bPathTracing);
 
 	// Refresh near/far clipping planes in case Size or FieldOfView are animated
 	Camera->UpdateCameraPosition();
@@ -384,16 +426,6 @@ void UMoviePipelineLookingGlassQuiltPass::RenderSample_GameThreadImpl(const FMov
 		{
 			EffectiveViewCone = DeviceViewCone;
 		}
-	}
-
-	// Path tracing needs both ray tracing and path tracing support on the active shader platform;
-	// with only the former, the renderer would silently draw without the path tracer
-	const bool bPathTracing = bUsePathTracing
-		&& IsRayTracingEnabled()
-		&& FDataDrivenShaderPlatformInfo::GetSupportsPathTracing(World->Scene->GetShaderPlatform());
-	if (bUsePathTracing && !bPathTracing)
-	{
-		UE_LOG(LogMovieRenderPipeline, Warning, TEXT("LookingGlassQuilt: Path Tracing requested but ray tracing/path tracing is not enabled or not supported on this platform; falling back to the deferred renderer"));
 	}
 
 	// Push any pending scene/component updates before manual scene rendering
@@ -412,14 +444,39 @@ void UMoviePipelineLookingGlassQuiltPass::RenderSample_GameThreadImpl(const FMov
 		bLoggedPathTracingWorkload = true;
 	}
 
+	// Use the sequence time supplied by MRQ for every quilt view and Path Tracer submission. Wall
+	// clock time would make time-driven materials change while one output frame is accumulating.
+	const FMoviePipelineFrameOutputState::FTimeData& TimeData = InSampleState.OutputState.TimeData;
+	const FGameTime GameTime = FGameTime::CreateUndilated(TimeData.WorldSeconds, TimeData.FrameDeltaTime);
+
+	// UE's independent temporal seed mode reads the Path Tracer state's non-resetting FrameIndex.
+	// Combined with the shared state above, this gives each tile a distinct ray sequence. Keep the
+	// override local to this pass and restore the project's value after all queued work is complete.
+	IConsoleVariable* TemporalSeedCVar = nullptr;
+	int32 PreviousTemporalSeedMode = 0;
+	if (bPathTracing && bDecorrelatePathTracerViews)
+	{
+		TemporalSeedCVar = IConsoleManager::Get().FindConsoleVariable(TEXT("r.PathTracing.FrameIndependentTemporalSeed"));
+		if (TemporalSeedCVar != nullptr)
+		{
+			PreviousTemporalSeedMode = TemporalSeedCVar->GetInt();
+			TemporalSeedCVar->SetWithCurrentPriority(1);
+		}
+	}
+
 	for (int32 TileIndex = 0; TileIndex < NumTiles; ++TileIndex)
 	{
-		RenderTileView(World, Camera, TileIndex, NumTiles, EffectiveViewCone, bPathTracing);
+		RenderTileView(World, Camera, TileIndex, NumTiles, EffectiveViewCone, bPathTracing, GameTime, InSampleState.bWorldIsPaused);
 		CopyTileToQuilt(TilingValues, TileIndex);
 
 		// Drain the render thread once per tile: with many tiles and many Path Tracer samples
 		// per tile, letting all scene renders of a frame queue up unthrottled can exhaust memory
 		FlushRenderingCommands();
+	}
+
+	if (TemporalSeedCVar != nullptr)
+	{
+		TemporalSeedCVar->SetWithCurrentPriority(PreviousTemporalSeedMode);
 	}
 
 	SubmitQuiltToOutput(InSampleState, TilingValues);

@@ -41,7 +41,13 @@ namespace UnrealBuildTool.Rules
                 new string[]
                 {
                     "Core",
+                    "CoreUObject",
+                    "Engine",
                     "InputCore",
+                    "Slate",
+                    "SlateCore",
+                    "MovieSceneCapture",
+                    "AVIWriter",
                 }
                 );
 
@@ -52,23 +58,12 @@ namespace UnrealBuildTool.Rules
                     "ApplicationCore",
                     "RenderCore",
                     "RHI",
-                    "CoreUObject",
-                    "Engine",
-                    "Slate",
-                    "SlateCore",
                     "Projects",
                     "HeadMountedDisplay",
                     "ImageWrapper",
                     "EngineSettings",
-                    "MovieSceneCapture",
                     "ImageWriteQueue",
-                    "AVIWriter",
                     "Renderer",
-
-#if UE_5_1_OR_LATER
-#else
-					"ImageWriteQueue",
-#endif
                     "Json",
                 }
                 );

@@ -26,7 +26,8 @@ class ULookingGlassCameraComponent;
  *
  * When bUsePathTracing is enabled (and the project/hardware support ray tracing), each tile view
  * is rendered with the Path Tracer, accumulating PathTracerSamplesPerView samples per tile through
- * a persistent per-tile view state.
+ * one reusable view state. Reusing the state avoids retaining a full Path Tracer history per tile
+ * and lets successive quilt views use decorrelated temporal ray sequences.
  *
  * Usage notes:
  *  - Bind your LookingGlassCapture actor (or any actor with a LookingGlassCamera component) to the
@@ -63,6 +64,9 @@ protected:
 	virtual void RenderSample_GameThreadImpl(const FMoviePipelineRenderPassMetrics& InSampleState) override;
 	//~ End UMoviePipelineRenderPass Interface
 
+	// UObject garbage collector helper for references retained by FSceneViewStateReference
+	static void AddReferencedObjects(UObject* InThis, FReferenceCollector& Collector);
+
 public:
 	/** Quilt tiling preset to render. "Automatic" resolves from the connected Looking Glass device (falls back to Portrait). */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Quilt Settings")
@@ -79,6 +83,10 @@ public:
 	/** Run the Path Tracer denoiser on the completed tile. Disabled by default because quilts render many small views and denoising each tile is expensive. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Quilt Settings|Path Tracing", meta = (EditCondition = "bUsePathTracing"))
 	bool bUsePathTracerDenoiser = false;
+
+	/** Give successive quilt views different temporal ray sequences. This reduces correlated noise when the views are blended by the lenticular display. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Quilt Settings|Path Tracing", meta = (EditCondition = "bUsePathTracing"))
+	bool bDecorrelatePathTracerViews = true;
 
 	/** Wait for the render thread after each Path Tracer sample to avoid queuing too much ray tracing work at once. Slower, but much less likely to trigger GPU device resets. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Quilt Settings|Path Tracing", meta = (EditCondition = "bUsePathTracing"))
@@ -103,11 +111,16 @@ private:
 	// Make sure the quilt/tile render targets match the tiling setup
 	void EnsureRenderTargets(const FLookingGlassTilingQuality& TilingValues);
 
-	// Make sure the per-tile view states match the tiling setup
-	void EnsureViewStates(const FLookingGlassTilingQuality& TilingValues, UWorld* World);
+	// Make sure the view states match the render mode. Path tracing reuses one state to avoid
+	// retaining a full accumulation history for every tile; raster rendering keeps one per tile.
+	void EnsureViewStates(const FLookingGlassTilingQuality& TilingValues, UWorld* World, bool bPathTracing);
+
+	// Release all view-state rendering resources before destroying the references
+	void DestroyViewStates();
 
 	// Render one tile view into TileRenderTarget
-	void RenderTileView(UWorld* World, ULookingGlassCameraComponent* Camera, int32 TileIndex, int32 NumTiles, float ViewConeDegrees, bool bPathTracing);
+	void RenderTileView(UWorld* World, ULookingGlassCameraComponent* Camera, int32 TileIndex, int32 NumTiles, float ViewConeDegrees,
+		bool bPathTracing, const FGameTime& GameTime, bool bWorldIsPaused);
 
 	// Composite TileRenderTarget into its quilt position
 	void CopyTileToQuilt(const FLookingGlassTilingQuality& TilingValues, int32 TileIndex);
@@ -126,7 +139,7 @@ private:
 	UPROPERTY(Transient)
 	UTextureRenderTarget2D* TileRenderTarget = nullptr;
 
-	/** Persistent per-tile view states; required for Path Tracer sample accumulation (and eye adaptation) */
+	/** Persistent view states used for Path Tracer accumulation and raster eye adaptation */
 	TArray<FSceneViewStateReference> TileViewStates;
 
 	/** Whether a "no camera found" error was already logged (log once per job, render black frames) */

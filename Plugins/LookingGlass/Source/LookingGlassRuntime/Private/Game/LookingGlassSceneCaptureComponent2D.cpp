@@ -60,29 +60,7 @@ void ULookingGlassSceneCaptureComponent2D::OnRegister()
 
 	ULookingGlassCameraComponent* Camera = NewObject<ULookingGlassCameraComponent>(MyOwner, NAME_None, RF_Transient | RF_TextExportTransient);
 
-	// Copy the legacy capture settings to the camera
-	Camera->Size = Size;
-	Camera->NearClipFactor = NearClipFactor;
-	Camera->bUseFarClipPlane = bUseFarClipPlane;
-	Camera->FarClipFactor = FarClipFactor;
-	Camera->FieldOfView = FOV;
-	Camera->bSingleViewMode = bSingleViewMode;
-	Camera->OverrideQuiltTexture2D = OverrideQuiltTexture2D;
-	Camera->TilingQuality = TilingQuality;
-	Camera->TilingValues = TilingValues;
-	Camera->bOverrideDOF = bOverrideDOF;
-	Camera->DOFAdjust = DOFAdjust;
-	Camera->DepthOfFieldFstop = DepthOfFieldFstop;
-	Camera->bDrawDebugFocusPlane = bDrawDebugFocusPlane;
-	Camera->bEnableMotionBlur = bEnableMotionBlur;
-#if WITH_EDITORONLY_DATA
-	Camera->FrustumColor = FrustumColor;
-	Camera->MidPlaneFrustumColor = MidPlaneFrustumColor;
-	Camera->MidPlaneLineLength = MidPlaneLineLength;
-	Camera->MidLineThickness = MidLineThickness;
-	Camera->FrustumLineThickness = FrustumLineThickness;
-	Camera->DebugFocusPlaneColor = DebugFocusPlaneColor;
-#endif // WITH_EDITORONLY_DATA
+	CopyLegacySettingsTo(*Camera);
 
 	// Place the camera at this component's transform, and make this component its capture driver
 	USceneComponent* CameraParent = GetAttachParent() != nullptr ? GetAttachParent() : this;
@@ -96,6 +74,34 @@ void ULookingGlassSceneCaptureComponent2D::OnRegister()
 	Camera->RegisterComponentWithWorld(World);
 
 	LegacyOwnerCamera = Camera;
+}
+
+void ULookingGlassSceneCaptureComponent2D::CopyLegacySettingsTo(ULookingGlassCameraComponent& Camera) const
+{
+	Camera.Size = Size;
+	Camera.NearClipFactor = NearClipFactor;
+	Camera.bUseFarClipPlane = bUseFarClipPlane;
+	Camera.FarClipFactor = FarClipFactor;
+	Camera.FieldOfView = FOV;
+	Camera.bSingleViewMode = bSingleViewMode;
+	Camera.OverrideQuiltTexture2D = OverrideQuiltTexture2D;
+	Camera.TilingQuality = TilingQuality;
+	Camera.TilingValues = TilingValues;
+	Camera.bOverrideDOF = bOverrideDOF;
+	Camera.DOFAdjust = DOFAdjust;
+	Camera.DepthOfFieldFstop = DepthOfFieldFstop;
+	Camera.bDrawDebugFocusPlane = bDrawDebugFocusPlane;
+	Camera.bEnableMotionBlur = bEnableMotionBlur;
+	Camera.PostProcessSettings = PostProcessSettings;
+	Camera.PostProcessBlendWeight = PostProcessBlendWeight;
+#if WITH_EDITORONLY_DATA
+	Camera.FrustumColor = FrustumColor;
+	Camera.MidPlaneFrustumColor = MidPlaneFrustumColor;
+	Camera.MidPlaneLineLength = MidPlaneLineLength;
+	Camera.MidLineThickness = MidLineThickness;
+	Camera.FrustumLineThickness = FrustumLineThickness;
+	Camera.DebugFocusPlaneColor = DebugFocusPlaneColor;
+#endif // WITH_EDITORONLY_DATA
 }
 
 void ULookingGlassSceneCaptureComponent2D::OnComponentDestroyed(bool bDestroyingHierarchy)

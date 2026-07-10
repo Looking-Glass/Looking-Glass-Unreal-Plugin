@@ -126,26 +126,7 @@ void ALookingGlassCapture::MigrateRenderCameraToCamera()
 	// Make sure the legacy component has finished loading its data
 	RenderCamera->ConditionalPostLoad();
 
-	LookingGlassCamera->Size = RenderCamera->Size;
-	LookingGlassCamera->NearClipFactor = RenderCamera->NearClipFactor;
-	LookingGlassCamera->bUseFarClipPlane = RenderCamera->bUseFarClipPlane;
-	LookingGlassCamera->FarClipFactor = RenderCamera->FarClipFactor;
-	LookingGlassCamera->FieldOfView = RenderCamera->FOV;
-	LookingGlassCamera->bSingleViewMode = RenderCamera->bSingleViewMode;
-	LookingGlassCamera->OverrideQuiltTexture2D = RenderCamera->OverrideQuiltTexture2D;
-	LookingGlassCamera->TilingQuality = RenderCamera->TilingQuality;
-	LookingGlassCamera->TilingValues = RenderCamera->TilingValues;
-	LookingGlassCamera->bOverrideDOF = RenderCamera->bOverrideDOF;
-	LookingGlassCamera->DOFAdjust = RenderCamera->DOFAdjust;
-	LookingGlassCamera->DepthOfFieldFstop = RenderCamera->DepthOfFieldFstop;
-	LookingGlassCamera->bDrawDebugFocusPlane = RenderCamera->bDrawDebugFocusPlane;
-	LookingGlassCamera->bEnableMotionBlur = RenderCamera->bEnableMotionBlur;
-	LookingGlassCamera->FrustumColor = RenderCamera->FrustumColor;
-	LookingGlassCamera->MidPlaneFrustumColor = RenderCamera->MidPlaneFrustumColor;
-	LookingGlassCamera->MidPlaneLineLength = RenderCamera->MidPlaneLineLength;
-	LookingGlassCamera->MidLineThickness = RenderCamera->MidLineThickness;
-	LookingGlassCamera->FrustumLineThickness = RenderCamera->FrustumLineThickness;
-	LookingGlassCamera->DebugFocusPlaneColor = RenderCamera->DebugFocusPlaneColor;
+	RenderCamera->CopyLegacySettingsTo(*LookingGlassCamera);
 
 	// The legacy component may have been saved attached to the spring arm (old hierarchy); make
 	// sure it sits under the camera, at identity transform, where the quilt rendering expects it

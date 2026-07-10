@@ -16,6 +16,9 @@ namespace UnrealBuildTool.Rules
                 new string[]
                 {
                     "Core",
+                    "CoreUObject",
+                    "Engine",
+                    "LookingGlassRuntime",
                     "MovieRenderPipelineCore",
                 }
                 );
@@ -23,13 +26,10 @@ namespace UnrealBuildTool.Rules
             PrivateDependencyModuleNames.AddRange(
                 new string[]
                 {
-                    "CoreUObject",
-                    "Engine",
                     "RenderCore",
                     "RHI",
                     "Renderer",
                     "ImageWriteQueue",
-                    "LookingGlassRuntime",
                 }
                 );
         }

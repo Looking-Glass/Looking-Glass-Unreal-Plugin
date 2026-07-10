@@ -6,6 +6,14 @@ It is not intended for realtime content generation at this time.
 
 For more information on how to use the plugin, check out our [docs site](https://docs.lookingglassfactory.com/developer-tools/index-2)!
 
+## Version 2.0 migration
+
+Version 2.0 intentionally changes the Looking Glass camera API. The user-facing `ULookingGlassCameraComponent` now inherits from Unreal's `UCameraComponent`; `ULookingGlassSceneCaptureComponent2D` remains only as the plugin's internal quilt capture driver.
+
+- Existing `LookingGlassCapture` assets migrate their serialized camera and post-process values when loaded in the Unreal Editor.
+- Sequencer tracks bound directly to the legacy `RenderCamera` component or its properties are not redirected. Rebind or recreate those tracks on `LookingGlassCamera`; use standard camera properties such as `FieldOfView` where applicable.
+- C++ and Blueprint code that directly used the legacy scene-capture component or removed pre-2.0 properties must migrate to `ULookingGlassCameraComponent`.
+
 ## Obtaining the source code
 
 `git clone git@github.com:Looking-Glass/Looking-Glass-Unreal-Plugin.git`
@@ -51,15 +59,18 @@ The plugin includes a Movie Render Queue render pass for outputting Looking Glas
 - Remove or disable `Deferred Rendering` unless you also want a regular 2D render.
 - Set the MRQ output resolution to match the selected quilt preset. For example, Looking Glass Go uses `4092 x 4092`.
 - The render pass output identifier is `LookingGlassQuilt`, so `{render_pass}` resolves to that name in MRQ output paths.
+- The camera's optical aspect controls projection. Quilt tile pixel aspect is a packing detail, so a rendered view may be scaled when it is copied into its tile.
 
-Path Tracing is supported by the Looking Glass Quilt pass. In Unreal Engine 5.5 on Windows, Path Tracing requires DirectX 12, SM6 shader formats, Support Hardware Ray Tracing, Path Tracing, and Compute Skin Cache if Unreal prompts for it. The pass defaults to 8 path-traced samples per quilt tile because total work is `tile count x samples per tile`; increasing this value can be very expensive on GPU memory and driver stability.
+Path Tracing is supported by the Looking Glass Quilt pass. In Unreal Engine 5.5 on Windows, Path Tracing requires DirectX 12, SM6 shader formats, Support Hardware Ray Tracing, Path Tracing, and Compute Skin Cache if Unreal prompts for it. The pass defaults to 8 path-traced samples per quilt tile because total work is `tile count x samples per tile`; increasing this value increases render time and can trigger a GPU watchdog reset. Larger quilt presets are the main driver of retained GPU memory. The pass reuses one Path Tracer state across tiles instead of retaining one full accumulation history per view.
 
-MRQ anti-aliasing spatial and temporal samples do not control this pass. Use `PathTracerSamplesPerView` in the Looking Glass Quilt settings for Path Tracing sample count.
+`Decorrelate Path Tracer Views` is enabled by default. It advances the temporal ray sequence between quilt views so structured noise differs from view to view and can be reduced by the display's lenticular blending.
+
+MRQ anti-aliasing spatial and temporal samples do not control this pass. Leave both at 1 when rendering only the quilt pass, and use `PathTracerSamplesPerView` in the Looking Glass Quilt settings for Path Tracing sample count.
 
 ![](https://github.com/Looking-Glass/Looking-Glass-Unreal-Plugin/blob/main/docs/docs-divider-gradient-stroke.png)
 
 ## How to package the plugin
 
-Packaging is needed for plugin's distribution accross different machines, e.g. providing builds over the Internet. The easiest way to package is to run `BuildPlugin.bat` file in the root folder of the project. This file will build and package the plugin for multiple engine versions, so if you don't need that - you may customize it to work with the version you needed.
+Packaging is needed for plugin distribution across different machines, such as publishing a prebuilt GitHub release. Run `BuildPlugin.bat` from the repository root to package for Unreal Engine 5.5, or pass another installed engine version as the first argument (for example, `BuildPlugin.bat 5.4`). Source-only changes do not require committing packaged build output.
 
-Alternatively, there's a standard way of packaging the plugin from the editor. Just doing the same actions as for enabling the plugin (to open the plugin's page in engine settings): go to the menu, Edit | Plugins | Project | Light Field Display | LookingGlass. There you'll see the "Package" option, click on it. The editor will actomatically execute all needed actions and pass the plugin over the Visual Studio to build it.
+Alternatively, package the plugin from the editor: go to Edit | Plugins | Project | Light Field Display | LookingGlass, then choose `Package`.

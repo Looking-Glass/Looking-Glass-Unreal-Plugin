@@ -3,6 +3,7 @@
 #include "Misc/LookingGlassLog.h"
 
 #include "Engine/TextureRenderTarget2D.h"
+#include "Runtime/Launch/Resources/Version.h"
 #include "UObject/UObjectGlobals.h"
 
 /*

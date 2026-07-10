@@ -4,9 +4,9 @@
 
 #include "LookingGlassSettings.h"
 
-#include "RHI.h"
 #include "Components/SceneCaptureComponent.h"
 
+class FRHICommandListImmediate;
 class FViewport;
 class FTextureRenderTargetResource;
 class FTextureResource;

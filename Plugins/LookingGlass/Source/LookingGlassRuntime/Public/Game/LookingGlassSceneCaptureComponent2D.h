@@ -63,6 +63,9 @@ public:
 	/** Render one multi-view rendering config into the component's TextureTarget, using the view infos prepared by the camera */
 	static void UpdateLookingGlassSceneCaptureContents(USceneCaptureComponent2D* CaptureComponent, struct FLookingGlassRenderingConfig& RenderingConfig, FSceneInterface* Scene);
 
+	/** Copy settings deserialized from the pre-2.0 component into the user-facing camera. */
+	void CopyLegacySettingsTo(ULookingGlassCameraComponent& Camera) const;
+
 public:
 	// ---------------------------------------------------------------------------------------------
 	// Legacy properties.

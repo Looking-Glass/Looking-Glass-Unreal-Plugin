@@ -24,7 +24,7 @@ public:
 
 	void AddReferencedObjects(FReferenceCollector& Collector);
 
-	UTextureRenderTarget2D* GetRenderTarget() const { return RenderTarget; }
+	UTextureRenderTarget2D* GetRenderTarget() const { return RenderTarget.Get(); }
 
 	TArray<FSceneCaptureViewInfo>& GetViewInfoArr() { return ViewInfoArr; }
 
@@ -54,7 +54,7 @@ public:
 	static void CalculateViewRect(float& U, float& V, float& SizeU, float& SizeV, int32 ViewRows, int32 ViewColumns, int32 ViewCount, int32 ViewIndex);
 
 private:
-	UTextureRenderTarget2D* RenderTarget;
+	TObjectPtr<UTextureRenderTarget2D> RenderTarget = nullptr;
 
 	// Same as ViewInfoArr.Num(). Number of views is limited either by GMaxTextureDimensions or MaxViews.
 	uint32 NumViews;

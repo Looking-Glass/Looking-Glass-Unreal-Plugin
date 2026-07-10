@@ -303,7 +303,8 @@ void FLookingGlassBridge::DrawTexture(void* Texture, int32 QuiltDX, int32 QuiltD
 	{
 		if (!BridgeController->UnregisterTextureDX(LGWindow, (IUnknown*)TextureRegistered))
 		{
-			UE_LOG(LogLookingGlassBridge, Warning, TEXT("Failed to unregister previous Bridge texture"));
+			UE_LOG(LogLookingGlassBridge, Warning, TEXT("Failed to unregister previous Bridge texture; retaining its registration for retry"));
+			return;
 		}
 		TextureRegistered = nullptr;
 	}
@@ -321,7 +322,16 @@ void FLookingGlassBridge::DrawTexture(void* Texture, int32 QuiltDX, int32 QuiltD
 	if (!BridgeController->DrawInteropQuiltTextureDX(LGWindow, (IUnknown*)TextureRegistered, QuiltDX, QuiltDY, Aspect, 1.0f))
 	{
 		UE_LOG(LogLookingGlassBridge, Warning, TEXT("Failed to draw Bridge quilt texture"));
-		TextureRegistered = nullptr;
+		if (BridgeController->UnregisterTextureDX(LGWindow, (IUnknown*)TextureRegistered))
+		{
+			// Re-register on the next frame. Do not forget the local pointer unless Bridge confirms
+			// that its registration was removed, or a duplicate registration can be attempted.
+			TextureRegistered = nullptr;
+		}
+		else
+		{
+			UE_LOG(LogLookingGlassBridge, Warning, TEXT("Failed to unregister Bridge texture after draw failure; retaining its registration for retry"));
+		}
 	}
 }
 
