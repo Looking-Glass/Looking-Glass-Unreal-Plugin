@@ -2,7 +2,7 @@
 
 #include "CoreMinimal.h"
 
-class ULookingGlassSceneCaptureComponent2D;
+class ULookingGlassCameraComponent;
 class IMovieSceneCaptureInterface;
 struct FLookingGlassBridge;
 
@@ -19,5 +19,6 @@ namespace LookingGlass
 
 	LOOKINGGLASSRUNTIME_API IMovieSceneCaptureInterface* GetMovieSceneCapture();
 
-	LOOKINGGLASSRUNTIME_API TWeakObjectPtr<ULookingGlassSceneCaptureComponent2D> GetGameLookingGlassCaptureComponent();
+	/** Returns the currently active LookingGlass camera (the one used for hologram rendering) */
+	LOOKINGGLASSRUNTIME_API TWeakObjectPtr<ULookingGlassCameraComponent> GetActiveLookingGlassCamera();
 };

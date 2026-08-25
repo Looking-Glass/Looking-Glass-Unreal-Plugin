@@ -47,7 +47,9 @@ enum class ELookingGlassQualitySettings : uint8
 	Q_32_Portrait			UMETA(DisplayName = "32 inch Portrait"),
 	Q_32_Landscape			UMETA(DisplayName = "32 inch Landscape"),
 	Q_EightPointNineLegacy 	UMETA(DisplayName = "8.9 inch (Legacy)"),
-	Q_Custom				UMETA(DisplayName = "Custom")
+	Q_Custom				UMETA(DisplayName = "Custom"),
+	Q_27_Portrait			UMETA(DisplayName = "27 inch Portrait"),
+	Q_27_Landscape			UMETA(DisplayName = "27 inch Landscape")
 };
 
 
@@ -219,7 +221,7 @@ struct FLookingGlassScreenshotSettings
 
 	// Resolution of the generated image file
 	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category = "LookingGlass|Screenshot Settings", Meta = (EditCondition = "bResolutionVisible", HideEditConditionToggle, EditConditionHides, ClampMin = "0", ClampMax = "10000", UIMin = "0", UIMax = "10000"))
-	FIntPoint Resolution;
+	FIntPoint Resolution = FIntPoint::ZeroValue;
 
 	// Hidden property used to control visibility of "Resolution" property
 	UPROPERTY()
@@ -359,6 +361,12 @@ public:
 
 	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category = "LookingGlass|Tiling Settings", Meta = (DisplayName = "LookingGlass - 32\" Landscape"))
 	FLookingGlassTilingQuality _32In_Landscape_Settings = FLookingGlassTilingQuality("32 Inch Landscape", 7, 7, 8190, 8190, 1.77777f);
+
+	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category = "LookingGlass|Tiling Settings", Meta = (DisplayName = "LookingGlass - 27\" Portrait"))
+	FLookingGlassTilingQuality _27In_Portrait_Settings = FLookingGlassTilingQuality("27 Inch Portrait", 12, 4, 7680, 4320, 0.5625f);
+
+	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category = "LookingGlass|Tiling Settings", Meta = (DisplayName = "LookingGlass - 27\" Landscape"))
+	FLookingGlassTilingQuality _27In_Landscape_Settings = FLookingGlassTilingQuality("27 Inch Landscape", 8, 6, 7680, 4320, 1.77777f);
 
 	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category = "LookingGlass|Tiling Settings", Meta = (DisplayName = "LookingGlass - 8.9\" (Legacy)"))
 	FLookingGlassTilingQuality _8_9inLegacy_Settings = FLookingGlassTilingQuality("Extra Low", 5, 9, 4096, 4096, 1.6f);

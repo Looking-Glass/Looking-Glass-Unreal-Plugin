@@ -10,8 +10,7 @@ mkdir %dst_dir%
 
 if not "%1" == "" goto engine_provided
 
-::call :build %uplugin_file% 5.3
-call :build %uplugin_file% 5.4
+call :build %uplugin_file% 5.5
 
 goto :eof
 

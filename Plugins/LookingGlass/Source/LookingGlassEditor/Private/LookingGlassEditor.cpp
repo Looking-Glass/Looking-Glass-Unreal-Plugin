@@ -7,7 +7,7 @@
 #include "ILookingGlassRuntime.h"
 #include "Misc/LookingGlassHelpers.h"
 #include "LookingGlassSettings.h"
-#include "Game/LookingGlassSceneCaptureComponent2D.h"
+#include "Game/LookingGlassCameraComponent.h"
 
 #include "ISettingsModule.h"
 #include "ISettingsSection.h"
@@ -108,7 +108,7 @@ bool FLookingGlassEditorModule::OnSettingsSaved()
 
 void FLookingGlassEditorModule::OnPIEViewportStarted()
 {
-	if ((LookingGlass::GetMovieSceneCapture() != nullptr && LookingGlass::GetGameLookingGlassCaptureComponent() != nullptr)
+	if ((LookingGlass::GetMovieSceneCapture() != nullptr && LookingGlass::GetActiveLookingGlassCamera() != nullptr)
 		|| GetDefault<ULookingGlassSettings>()->LookingGlassWindowSettings.bLockInMainViewport)
 	{
 		// Just in case, stop existing player, as we'll probably change settings
@@ -137,12 +137,12 @@ void FLookingGlassEditorModule::OnEditorSelectionChanged(const TArray<UObject*>&
 		AActor* Actor = Cast<AActor>(NewSelection[0]);
 		if (Actor != nullptr)
 		{
-			ULookingGlassSceneCaptureComponent2D* CaptureComponent = Actor->FindComponentByClass<ULookingGlassSceneCaptureComponent2D>();
-			if (CaptureComponent)
+			ULookingGlassCameraComponent* LookingGlassCamera = Actor->FindComponentByClass<ULookingGlassCameraComponent>();
+			if (LookingGlassCamera)
 			{
 				// Make the selected component first, so it will be activated in LookingGlassRuntime
-				ILookingGlassRuntime::Get().EditorLookingGlassCaptureComponents.Remove(CaptureComponent);
-				ILookingGlassRuntime::Get().EditorLookingGlassCaptureComponents.Insert(CaptureComponent, 0);
+				ILookingGlassRuntime::Get().EditorLookingGlassCameras.Remove(LookingGlassCamera);
+				ILookingGlassRuntime::Get().EditorLookingGlassCameras.Insert(LookingGlassCamera, 0);
 			}
 		}
 	}

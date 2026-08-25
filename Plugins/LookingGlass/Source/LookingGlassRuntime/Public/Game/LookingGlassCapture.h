@@ -10,6 +10,7 @@
 #include "LookingGlassCapture.generated.h"
 
 class USpringArmComponent;
+class ULookingGlassCameraComponent;
 class ULookingGlassSceneCaptureComponent2D;
 
 
@@ -18,8 +19,8 @@ UCLASS(hidecategories = ("Actor", "LOD", "Cooking", "Rendering", "Replication", 
 class LOOKINGGLASSRUNTIME_API ALookingGlassCapture : public AActor
 {
 	GENERATED_BODY()
-	
-public:	
+
+public:
 	ALookingGlassCapture();
 
 #if WITH_EDITOR
@@ -28,10 +29,17 @@ public:
 
 	virtual void Serialize(FArchive& Ar) override;
 
+	virtual void PostLoad() override;
+
+	// The user-facing camera of this actor. Being a regular UCameraComponent subclass, it can be
+	// bound to Camera Cuts tracks, piloted in the viewport and used with Movie Render Queue like
+	// any other camera. Quilt output is provided by the LookingGlassMovieRenderPipeline MRQ pass.
+	ULookingGlassCameraComponent* GetLookingGlassCamera() const { return LookingGlassCamera; }
+
 protected:
 
 #if WITH_EDITORONLY_DATA
-	// Legacy properties, moved to ULookingGlassSceneCaptureComponent2D. Here for backwards compatibility.
+	// Legacy properties, moved to the camera component. Here for backwards compatibility.
 
 	UPROPERTY()
 	float Size_DEPRECATED = 150.0f;
@@ -59,8 +67,16 @@ protected:
 
 	UPROPERTY()
 	FLookingGlassTilingQuality TilingValues_DEPRECATED;
-	
+
+	// Migration of data saved before plugin custom version MovedFunctionalityToComponent
 	void LoadLegacyProperties();
+
+	// Migration of data saved before plugin custom version RefactoredToCameraComponent:
+	// copies settings from the legacy scene capture component into the camera component
+	void MigrateRenderCameraToCamera();
+
+	// Custom version of the archive this actor was loaded from; used by PostLoad migrations
+	int32 LoadedCustomVersion = MAX_int32;
 #endif // WITH_EDITORONLY_DATA
 
 private:
@@ -72,8 +88,14 @@ private:
 	UPROPERTY(Category = CameraActor, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
 	USpringArmComponent* CameraSpringArm = nullptr;
 
-	// The primary component in this actor, render camera
+	// The primary component in this actor: the render camera
 	UPROPERTY(Category = CameraActor, VisibleAnywhere, BlueprintReadOnly, meta = (AllowPrivateAccess = "true"))
+	ULookingGlassCameraComponent* LookingGlassCamera = nullptr;
+
+	// Internal scene capture component used by LookingGlassCamera for quilt rendering. This is also
+	// the pre-camera-refactoring "RenderCamera" component: keeping the subobject (with the same name)
+	// lets data saved with older plugin versions load, so it can be migrated to LookingGlassCamera.
+	UPROPERTY()
 	ULookingGlassSceneCaptureComponent2D* RenderCamera = nullptr;
 
 	void UpdateCameraPosition();

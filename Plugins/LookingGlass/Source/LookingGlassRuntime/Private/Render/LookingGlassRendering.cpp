@@ -1,5 +1,5 @@
 #include "Render/LookingGlassRendering.h"
-#include "Game/LookingGlassSceneCaptureComponent2D.h"
+#include "Game/LookingGlassCameraComponent.h"
 
 #include "ILookingGlassRuntime.h"
 #include "Misc/LookingGlassLog.h"
@@ -10,6 +10,7 @@
 #include "TextureResource.h"
 #include "ScreenRendering.h"
 #include "CommonRenderResources.h"
+#include "RendererInterface.h"
 
 #include "Runtime/Launch/Resources/Version.h"
 

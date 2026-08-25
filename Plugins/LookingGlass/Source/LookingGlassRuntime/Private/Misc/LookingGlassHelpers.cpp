@@ -17,14 +17,14 @@ IMovieSceneCaptureInterface* LookingGlass::GetMovieSceneCapture()
 #endif
 }
 
-TWeakObjectPtr<ULookingGlassSceneCaptureComponent2D> LookingGlass::GetGameLookingGlassCaptureComponent()
+TWeakObjectPtr<ULookingGlassCameraComponent> LookingGlass::GetActiveLookingGlassCamera()
 {
 	ILookingGlassRuntime& LookingGlassRuntime = ILookingGlassRuntime::Get();
-	TArray<TWeakObjectPtr<ULookingGlassSceneCaptureComponent2D> >* ComponentArray = &LookingGlassRuntime.GameLookingGlassCaptureComponents;
+	TArray<TWeakObjectPtr<ULookingGlassCameraComponent> >* ComponentArray = &LookingGlassRuntime.GameLookingGlassCameras;
 #if WITH_EDITOR
-	if (LookingGlassRuntime.EditorLookingGlassCaptureComponents.Num())
+	if (LookingGlassRuntime.EditorLookingGlassCameras.Num())
 	{
-		ComponentArray = &LookingGlassRuntime.EditorLookingGlassCaptureComponents;
+		ComponentArray = &LookingGlassRuntime.EditorLookingGlassCameras;
 	}
 #endif
 	// Refine the array - remove possibly dead components

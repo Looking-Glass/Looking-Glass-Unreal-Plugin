@@ -12,6 +12,14 @@ public class LookingGlassEditor : ModuleRules
 
 		PCHUsage = PCHUsageMode.NoPCHs;
 
+#if !UE_5_5_OR_LATER
+		// See LookingGlassRuntime.Build.cs: avoid UE 5.3/5.4's broken modern-MSVC ASan probe.
+		if (Target.Platform == UnrealTargetPlatform.Win64)
+		{
+			PrivateDefinitions.Add("PLATFORM_HAS_ASAN_INCLUDE=0");
+		}
+#endif
+
 		PrivateDependencyModuleNames.AddRange(
 			new string[]
 			{

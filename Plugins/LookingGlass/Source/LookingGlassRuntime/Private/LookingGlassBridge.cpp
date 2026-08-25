@@ -55,12 +55,29 @@ static void ReportError(const FString& Message)
 
 bool FLookingGlassBridge::Initialize()
 {
+	if (bInitialized && BridgeController != nullptr)
+	{
+		return true;
+	}
+
+	if (BridgeController != nullptr)
+	{
+		Shutdown();
+	}
+
+	LGWindow = NoWindow;
+	TextureRegistered = nullptr;
+	Displays.Empty();
+	CalibrationTemplates.Empty();
+
 	// Load the Bridge
 	BridgeController = new ControllerWithCalibrationTemplates();
 	if (!BridgeController->Initialize(TEXT("UnrealEnginePlugin")))
 	{
 		ReportError(TEXT("Bridge initialization failed"));
 		delete BridgeController;
+		BridgeController = nullptr;
+		bInitialized = false;
 		return false;
 	}
 
@@ -76,6 +93,7 @@ bool FLookingGlassBridge::Initialize()
 		ReportError(FString::Printf(
 			TEXT("The installed Looking Glass Bridge has version %d.%d.%d, required version is %d.%d.%d, please update!"),
 			Major, Minor, Build, BRIDGE_VERSION_MAJOR, BRIDGE_VERSION_MINOR, BRIDGE_VERSION_BUILD));
+		Shutdown();
 		return false;
 	}
 
@@ -201,12 +219,23 @@ void FLookingGlassBridge::ReadDisplays()
 
 void FLookingGlassBridge::Shutdown()
 {
+	if (bInitialized)
+	{
+		StopRendering();
+	}
+
 	if (BridgeController != nullptr)
 	{
 		BridgeController->Uninitialize();
 		delete BridgeController;
 		BridgeController = nullptr;
 	}
+
+	LGWindow = NoWindow;
+	TextureRegistered = nullptr;
+	Displays.Empty();
+	CalibrationTemplates.Empty();
+	bInitialized = false;
 }
 
 static_assert(sizeof(int32) == sizeof(WINDOW_HANDLE));
@@ -218,11 +247,20 @@ void FLookingGlassBridge::StartRendering()
 	//todo: DeviceIndex - pass it as 4th param of instance_window_dx()
 	if (LGWindow == NoWindow)
 	{
-		BridgeController->InstanceWindowDX((IUnknown*)GDynamicRHI->RHIGetNativeDevice(), (WINDOW_HANDLE*)&LGWindow);
+		if (!BridgeController->InstanceWindowDX((IUnknown*)GDynamicRHI->RHIGetNativeDevice(), (WINDOW_HANDLE*)&LGWindow))
+		{
+			UE_LOG(LogLookingGlassBridge, Error, TEXT("Failed to create Bridge DX window"));
+			LGWindow = NoWindow;
+		}
 	}
 	else
 	{
-		BridgeController->ShowWindow(LGWindow, true);
+		if (!BridgeController->ShowWindow(LGWindow, true))
+		{
+			UE_LOG(LogLookingGlassBridge, Warning, TEXT("Failed to show existing Bridge window; a new window will be created on the next draw"));
+			LGWindow = NoWindow;
+			TextureRegistered = nullptr;
+		}
 	}
 }
 
@@ -230,14 +268,20 @@ void FLookingGlassBridge::StopRendering()
 {
 	check(bInitialized);
 
-	if (TextureRegistered != nullptr)
+	if (TextureRegistered != nullptr && LGWindow != NoWindow)
 	{
-		BridgeController->UnregisterTextureDX(LGWindow, (IUnknown*)TextureRegistered);
+		if (!BridgeController->UnregisterTextureDX(LGWindow, (IUnknown*)TextureRegistered))
+		{
+			UE_LOG(LogLookingGlassBridge, Warning, TEXT("Failed to unregister Bridge texture"));
+		}
 		TextureRegistered = nullptr;
 	}
 	if (LGWindow != NoWindow)
 	{
 		BridgeController->ShowWindow(LGWindow, false);
+		// Bridge's hidden-window path can keep stale D3D interop state after PIE restarts.
+		// Force the next session to instance a fresh Bridge window.
+		LGWindow = NoWindow;
 	}
 }
 
@@ -245,20 +289,50 @@ void FLookingGlassBridge::DrawTexture(void* Texture, int32 QuiltDX, int32 QuiltD
 {
 	check(bInitialized);
 
+	if (LGWindow == NoWindow)
+	{
+		StartRendering();
+	}
+	if (LGWindow == NoWindow)
+	{
+		return;
+	}
+
 	// Just in case - check if there's already a registered texture
 	if (TextureRegistered != Texture && TextureRegistered != nullptr)
 	{
-		BridgeController->UnregisterTextureDX(LGWindow, (IUnknown*)TextureRegistered);
+		if (!BridgeController->UnregisterTextureDX(LGWindow, (IUnknown*)TextureRegistered))
+		{
+			UE_LOG(LogLookingGlassBridge, Warning, TEXT("Failed to unregister previous Bridge texture; retaining its registration for retry"));
+			return;
+		}
 		TextureRegistered = nullptr;
 	}
 
 	if (TextureRegistered == nullptr)
 	{
-		BridgeController->RegisterTextureDX(LGWindow, (IUnknown*)Texture);
+		if (!BridgeController->RegisterTextureDX(LGWindow, (IUnknown*)Texture))
+		{
+			UE_LOG(LogLookingGlassBridge, Warning, TEXT("Failed to register Bridge texture"));
+			return;
+		}
 		TextureRegistered = Texture;
 	}
 
-	BridgeController->DrawInteropQuiltTextureDX(LGWindow, (IUnknown*)TextureRegistered, QuiltDX, QuiltDY, Aspect, 1.0f);
+	if (!BridgeController->DrawInteropQuiltTextureDX(LGWindow, (IUnknown*)TextureRegistered, QuiltDX, QuiltDY, Aspect, 1.0f))
+	{
+		UE_LOG(LogLookingGlassBridge, Warning, TEXT("Failed to draw Bridge quilt texture"));
+		if (BridgeController->UnregisterTextureDX(LGWindow, (IUnknown*)TextureRegistered))
+		{
+			// Re-register on the next frame. Do not forget the local pointer unless Bridge confirms
+			// that its registration was removed, or a duplicate registration can be attempted.
+			TextureRegistered = nullptr;
+		}
+		else
+		{
+			UE_LOG(LogLookingGlassBridge, Warning, TEXT("Failed to unregister Bridge texture after draw failure; retaining its registration for retry"));
+		}
+	}
 }
 
 #undef LOCTEXT_NAMESPACE

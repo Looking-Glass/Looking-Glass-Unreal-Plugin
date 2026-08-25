@@ -3,6 +3,7 @@
 #include "HAL/FileManager.h"
 #include "Misc/CommandLine.h"
 #include "Misc/FeedbackContext.h"
+#include "Misc/EngineVersionComparison.h"
 #include "Misc/ScopedSlowTask.h"
 #include "ImageWriteQueue.h"
 #include "Modules/ModuleManager.h"
@@ -11,7 +12,7 @@
 #include "AVIWriter.h"
 
 #include "Render/LookingGlassViewportClient.h"
-#include "Game/LookingGlassSceneCaptureComponent2D.h"
+#include "Game/LookingGlassCameraComponent.h"
 
 struct FImageFrameData : IFramePayload
 {
@@ -33,10 +34,10 @@ bool ULookingGlassProtocol::SetupImpl()
 	ELookingGlassQualitySettings TilingQuality = TilingSettings;
 	if (TilingQuality == ELookingGlassQualitySettings::Q_Automatic)
 	{
-		TilingQuality = ULookingGlassSceneCaptureComponent2D::GetAutomaticTilingQuality();
+		TilingQuality = ULookingGlassCameraComponent::GetAutomaticTilingQuality();
 	}
 	// Set the global quality for rendering, so switching between components with different setup won't affect the picture
-	ULookingGlassSceneCaptureComponent2D::SetGlobalTilingProperties(TilingQuality);
+	ULookingGlassCameraComponent::SetGlobalTilingProperties(TilingQuality);
 
 	return true;
 }
@@ -71,7 +72,7 @@ void ULookingGlassProtocol::FinalizeImpl()
 {
 	FLookingGlassViewportClient::OnLookingGlassFrameReady.RemoveAll(this);
 	// Unhook global resolution
-	ULookingGlassSceneCaptureComponent2D::ResetGlobalTilingProperties();
+	ULookingGlassCameraComponent::ResetGlobalTilingProperties();
 }
 
 void ULookingGlassProtocol::OnFrameReady(const TArray<FColor>& Bitmap, int32 Width, int32 Height)
@@ -83,7 +84,11 @@ void ULookingGlassProtocol::OnFrameReady(const TArray<FColor>& Bitmap, int32 Wid
 	}
 
 	FFramePayloadPtr Payload = PendingFramePayloads[0];
+#if UE_VERSION_OLDER_THAN(5, 4, 0)
+	PendingFramePayloads.RemoveAt(0, 1, true);
+#else
 	PendingFramePayloads.RemoveAt(0, 1, EAllowShrinking::Yes);
+#endif
 
 	FCapturedFrameData FrameData(FIntPoint(Width, Height), Payload);
 	FrameData.ColorBuffer = Bitmap;
@@ -156,7 +161,7 @@ void ULookingGlassProtocol::UpdateResolutionInUI()
 	ELookingGlassQualitySettings TilingQuality = TilingSettings;
 	if (TilingQuality == ELookingGlassQualitySettings::Q_Automatic)
 	{
-		TilingQuality = ULookingGlassSceneCaptureComponent2D::GetAutomaticTilingQuality();
+		TilingQuality = ULookingGlassCameraComponent::GetAutomaticTilingQuality();
 	}
 
 	FCaptureResolution* pResolution = GetCurrentResolitionSetting();

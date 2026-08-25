@@ -1,7 +1,7 @@
 {
   "FileVersion": 3,
-  "Version": 1,
-  "VersionName": "1.6",
+  "Version": 3,
+  "VersionName": "2.2.0",
   "FriendlyName": "Looking Glass",
   "Description": "Looking Glass Plugin for Unreal Engine 5",
   "Category": "Light Field Display",
@@ -17,13 +17,25 @@
       "Name": "LookingGlassRuntime",
       "Type": "Runtime",
       "LoadingPhase": "PostConfigInit",
-      "WhitelistPlatforms": [ "Win64" ]
+      "PlatformAllowList": [ "Win64" ]
+    },
+    {
+      "Name": "LookingGlassMovieRenderPipeline",
+      "Type": "Runtime",
+      "LoadingPhase": "Default",
+      "PlatformAllowList": [ "Win64" ]
     },
     {
       "Name": "LookingGlassEditor",
       "Type": "Editor",
       "LoadingPhase": "Default",
-      "WhitelistPlatforms": [ "Win64" ]
+      "PlatformAllowList": [ "Win64" ]
+    }
+  ],
+  "Plugins": [
+    {
+      "Name": "MovieRenderPipeline",
+      "Enabled": true
     }
   ]
 }

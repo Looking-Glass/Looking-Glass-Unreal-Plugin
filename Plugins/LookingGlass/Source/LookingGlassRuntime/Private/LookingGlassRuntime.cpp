@@ -11,7 +11,7 @@
 
 #include "Misc/LookingGlassHelpers.h"
 #include "Misc/LookingGlassLog.h"
-#include "Game/LookingGlassSceneCaptureComponent2D.h"
+#include "Game/LookingGlassCameraComponent.h"
 
 #include "Managers/LookingGlassCommandLineManager.h"
 #include "Managers/LookingGlassLaunchManager.h"
@@ -25,7 +25,6 @@
 #include "Engine/GameEngine.h"
 
 #include "Interfaces/IPluginManager.h"
-#include "ISequencerObjectChangeListener.h"
 
 #if WITH_EDITOR
 #include "Settings/LevelEditorPlaySettings.h"
@@ -43,11 +42,12 @@ void FLookingGlassRuntimeModule::StartupModule()
 	Managers.Add(LookingGlassCommandLineManager = MakeShareable(new FLookingGlassCommandLineManager()));
 
 	UGameViewportClient::OnViewportCreated().AddRaw(this, &FLookingGlassRuntimeModule::OnGameViewportCreated);
+	EnginePreExitHandle = FCoreDelegates::OnEnginePreExit.AddRaw(this, &FLookingGlassRuntimeModule::StopPlayer);
 
 	// Generate default calibration, it will be changed when Play button is clicked
 	MakeDefaultCalibration();
 
-	FCoreDelegates::OnPostEngineInit.AddLambda([this]()
+	PostEngineInitHandle = FCoreDelegates::OnPostEngineInit.AddLambda([this]()
 		{
 			// Init all managers
 			InitAllManagers();
@@ -78,6 +78,29 @@ void FLookingGlassRuntimeModule::StartupModule()
 
 void FLookingGlassRuntimeModule::ShutdownModule()
 {
+	LifetimeToken.Reset();
+	StopPlayer();
+
+	UGameViewportClient::OnViewportCreated().RemoveAll(this);
+	FCoreDelegates::OnPostEngineInit.Remove(PostEngineInitHandle);
+	PostEngineInitHandle.Reset();
+	FCoreDelegates::OnEnginePreExit.Remove(EnginePreExitHandle);
+	EnginePreExitHandle.Reset();
+
+	if (GEngine && GEngine->GameViewport)
+	{
+		GEngine->GameViewport->OnCloseRequested().RemoveAll(this);
+	}
+
+	if (FSlateApplication::IsInitialized())
+	{
+		TSharedPtr<GenericApplication> PlatformApplication = FSlateApplication::Get().GetPlatformApplication();
+		if (PlatformApplication.IsValid())
+		{
+			PlatformApplication->OnDisplayMetricsChanged().RemoveAll(this);
+		}
+	}
+
 #if WITH_EDITOR
 	ISequencerModule* SequencerModulePtr = FModuleManager::Get().GetModulePtr<ISequencerModule>("Sequencer");
 	if (SequencerModulePtr)
@@ -104,8 +127,16 @@ void FLookingGlassRuntimeModule::OnDisplayMetricsChanged(const FDisplayMetrics& 
 {
 	// Ensure the following code will be executed in context of the main thread, and not in the message handler. Without
 	// that, reconfiguring the display when device is connected or disconnected may cause assertions and/or crashes.
-	AsyncTask(ENamedThreads::GameThread, [this, InDisplayMetrics]()
+	// WeakLifetimeToken is initialized once and never reassigned, so copying it here does not
+	// race ShutdownModule resetting the owning shared pointer on the game thread.
+	const TWeakPtr<uint8, ESPMode::ThreadSafe> WeakToken = WeakLifetimeToken;
+	AsyncTask(ENamedThreads::GameThread, [this, WeakToken, InDisplayMetrics]()
 		{
+			if (!WeakToken.IsValid())
+			{
+				return;
+			}
+
 			// Reload calibration only if amount of displays has been changed
 			if (InDisplayMetrics.MonitorInfo.Num() != NumMonitors)
 			{
@@ -113,12 +144,17 @@ void FLookingGlassRuntimeModule::OnDisplayMetricsChanged(const FDisplayMetrics& 
 			}
 
 			NumMonitors = InDisplayMetrics.MonitorInfo.Num();
-			ULookingGlassSceneCaptureComponent2D::UpdateTilingPropertiesForAllComponents();
+			ULookingGlassCameraComponent::UpdateTilingPropertiesForAllComponents();
 		});
 }
 
 void FLookingGlassRuntimeModule::PrepareDisplays()
 {
+	if (!Bridge.bInitialized)
+	{
+		Bridge.Initialize();
+	}
+
 	Bridge.ReadDisplays();
 }
 
@@ -157,6 +193,11 @@ void FLookingGlassRuntimeModule::StartPlayer(ELookingGlassModeType LookingGlassM
 	}
 
 	PrepareDisplays();
+
+	if (Bridge.bInitialized)
+	{
+		Bridge.StopRendering();
+	}
 
 	bIsRenderingOnDevice = true;
 
@@ -240,7 +281,7 @@ void FLookingGlassRuntimeModule::StartPlayer(ELookingGlassModeType LookingGlassM
 			MakeDefaultCalibration();
 		}
 		// Update tiling settings, mainly needed for "Automatic" preset
-		ULookingGlassSceneCaptureComponent2D::UpdateTilingPropertiesForAllComponents();
+		ULookingGlassCameraComponent::UpdateTilingPropertiesForAllComponents();
 
 		LookingGlassWindow = SNew(SWindow)
 			.Type(EWindowType::GameWindow)
@@ -396,6 +437,7 @@ void FLookingGlassRuntimeModule::StartPlayer(ELookingGlassModeType LookingGlassM
 #endif
 #endif // 0
 			}
+			GEngine->GameViewport->OnCloseRequested().RemoveAll(this);
 			GEngine->GameViewport->OnCloseRequested().AddRaw(this, &FLookingGlassRuntimeModule::OnGameViewportCloseRequested);
 
 			// Create and assign viewport to window
@@ -432,6 +474,11 @@ void FLookingGlassRuntimeModule::StopPlayer()
 
 	if (bIsPlaying == true)
 	{
+		if (Bridge.bInitialized)
+		{
+			Bridge.StopRendering();
+		}
+
 		// Stop all managers
 		for (auto Mng : Managers)
 		{
@@ -440,8 +487,14 @@ void FLookingGlassRuntimeModule::StopPlayer()
 
 		auto PlayModeType = CurrentLookingGlassModeType;
 
-		// Stop PlayInStandalon first
-		if (bIsStandaloneGame || bIsCaptureStandaloneMovie || bLockInMainViewport)
+		// Tear down the resources that were actually created. A public caller can request a
+		// separate window while the persisted main-viewport lock is enabled.
+		if (LookingGlassWindow.IsValid())
+		{
+			PlayModeType = ELookingGlassModeType::PlayMode_InSeparateWindow;
+		}
+		// Standalone, capture, and locked sessions otherwise use main-viewport teardown.
+		else if (bIsStandaloneGame || bIsCaptureStandaloneMovie || bLockInMainViewport)
 		{
 			PlayModeType = ELookingGlassModeType::PlayMode_InMainViewport;
 		}
@@ -450,39 +503,47 @@ void FLookingGlassRuntimeModule::StopPlayer()
 		{
 		case ELookingGlassModeType::PlayMode_InSeparateWindow:
 		{
-			if (bIsDestroyWindowRequested == false)
+			TSharedPtr<SWindow> WindowToDestroy = LookingGlassWindow;
+			const bool bShouldRequestDestroy = !bIsDestroyWindowRequested;
+			bIsDestroyWindowRequested = true;
+
+			// Clear our stored delegate before requesting destruction. An OS-initiated close is
+			// already inside Slate's callback, so its window delegate must remain untouched.
+			OnWindowClosedDelegate.Unbind();
+
+			LookingGlassViewport.Reset();
+			LookingGlassWindow.Reset();
+
+			if (bShouldRequestDestroy && WindowToDestroy.IsValid())
 			{
-				bIsDestroyWindowRequested = true;
+				// Prevent a programmatic close from re-entering StopPlayer.
+				WindowToDestroy->SetOnWindowClosed(FOnWindowClosed());
 
 				if (FSlateApplication::IsInitialized())
 				{
-					LookingGlassWindow->RequestDestroyWindow();
+					WindowToDestroy->RequestDestroyWindow();
 				}
 				else
 				{
-					LookingGlassWindow->DestroyWindowImmediately();
+					WindowToDestroy->DestroyWindowImmediately();
 				}
-
-				// Stop player
-				OnWindowClosedDelegate.Unbind();
-
-				LookingGlassViewport.Reset();
-				LookingGlassWindow.Reset();
 			}
 
 			break;
 		}
 		case ELookingGlassModeType::PlayMode_InMainViewport:
 		{
-			if (GEngine->GameViewport)
+			if (GEngine && GEngine->GameViewport)
 			{
+				GEngine->GameViewport->OnCloseRequested().RemoveAll(this);
 				GEngine->GameViewport->bDisableWorldRendering = false;
-				GEngine->GameViewport->RemoveViewportWidgetContent(
-					LookingGlassViewport.ToSharedRef()
-				);
-
-				LookingGlassViewport.Reset();
+				if (LookingGlassViewport.IsValid())
+				{
+					GEngine->GameViewport->RemoveViewportWidgetContent(LookingGlassViewport.ToSharedRef());
+				}
 			}
+
+			LookingGlassViewport.Reset();
 
 			break;
 		}
@@ -502,6 +563,9 @@ void FLookingGlassRuntimeModule::RestartPlayer(ELookingGlassModeType LookingGlas
 
 void FLookingGlassRuntimeModule::OnWindowClosed(const TSharedRef<SWindow>& Window)
 {
+	// Slate is already destroying this window. Mark it first so StopPlayer only
+	// performs cleanup and does not recursively request destruction.
+	bIsDestroyWindowRequested = true;
 	StopPlayer();
 }
 
