@@ -67,6 +67,12 @@ FLookingGlassTilingQuality ULookingGlassSettings::GetTilingQualityFor(ELookingGl
 	case ELookingGlassQualitySettings::Q_32_Landscape:
 		TilingValues = _32In_Landscape_Settings;
 		break;
+	case ELookingGlassQualitySettings::Q_27_Portrait:
+		TilingValues = _27In_Portrait_Settings;
+		break;
+	case ELookingGlassQualitySettings::Q_27_Landscape:
+		TilingValues = _27In_Landscape_Settings;
+		break;
 	case ELookingGlassQualitySettings::Q_EightPointNineLegacy:
 		TilingValues = _8_9inLegacy_Settings;
 		break;

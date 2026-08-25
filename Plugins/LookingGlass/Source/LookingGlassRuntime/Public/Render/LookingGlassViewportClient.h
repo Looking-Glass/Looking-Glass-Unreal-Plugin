@@ -133,7 +133,7 @@ public:
 	 * @returns	True to consume the key event, false to pass it on.
 	 */
 
-	virtual bool InputKey(FViewport* Viewport, int32 ControllerId, FKey Key, EInputEvent Event, float AmountDepressed = 1.0f, bool bGamepad = false) override;
+	virtual bool InputKey(const FInputKeyEventArgs& EventArgs) override;
 
 	/**
 	 * @fn	virtual bool FLookingGlassViewportClient::InputAxis(FViewport* Viewport, int32 ControllerId, FKey Key, float Delta, float DeltaTime, int32 NumSamples = 1, bool bGamepad = false) override;
@@ -153,12 +153,25 @@ public:
 	 * @returns	True to consume the axis movement, false to pass it on.
 	 */
 
-	//todo: should override a different method since UE5.1
-	virtual bool InputAxis(FViewport* Viewport, int32 ControllerId, FKey Key, float Delta, float DeltaTime, int32 NumSamples = 1, bool bGamepad = false) override;
+	// UE 5.6 removed the legacy int32-controller overload in favor of the event-args API.
+#if ENGINE_MAJOR_VERSION < 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION < 6)
+	virtual bool InputAxis(FViewport* Viewport, FInputDeviceId InputDevice, FKey Key, float Delta, float DeltaTime, int32 NumSamples = 1, bool bGamepad = false) override;
+#else
+	virtual bool InputAxis(const FInputKeyEventArgs& EventArgs) override;
+#endif
 
 	virtual bool InputChar(FViewport* Viewport, int32 ControllerId, TCHAR Character) override;
+
+#if ENGINE_MAJOR_VERSION < 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION < 6)
 	virtual bool InputTouch(FViewport* Viewport, int32 ControllerId, uint32 Handle, ETouchType::Type Type, const FVector2D& TouchLocation, float Force, FDateTime DeviceTimestamp, uint32 TouchpadIndex) override;
 	virtual bool InputMotion(FViewport* Viewport, int32 ControllerId, const FVector& Tilt, const FVector& RotationRate, const FVector& Gravity, const FVector& Acceleration) override;
+#elif ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION < 8
+	virtual bool InputTouch(FViewport* Viewport, FInputDeviceId DeviceId, uint32 Handle, ETouchType::Type Type, const FVector2D& TouchLocation, float Force, uint32 TouchpadIndex, uint64 Timestamp) override;
+	virtual bool InputMotion(FViewport* Viewport, FInputDeviceId DeviceId, const FVector& Tilt, const FVector& RotationRate, const FVector& Gravity, const FVector& Acceleration, uint64 Timestamp) override;
+#else
+	virtual bool InputTouch(FViewport* Viewport, FTouchId TouchId, ETouchType::Type Type, const FVector2D& TouchLocation, float Force, uint64 Timestamp) override;
+	virtual bool InputMotion(FViewport* Viewport, FInputDeviceId DeviceId, const FVector& Tilt, const FVector& RotationRate, const FVector& Gravity, const FVector& Acceleration, uint64 Timestamp) override;
+#endif
 
 	/**
 	 * @fn	virtual UWorld* FLookingGlassViewportClient::GetWorld() const override
@@ -415,6 +428,9 @@ private:
 #endif
 
 private:
+	bool HandleInputKey(FViewport* Viewport, int32 ControllerId, FKey Key, EInputEvent Event, float AmountDepressed, bool bGamepad, const FInputKeyEventArgs& EventArgs);
+	bool HandleInputAxis(FViewport* Viewport, FInputDeviceId DeviceId, FKey Key, float Delta, float DeltaTime, int32 NumSamples, bool bGamepad, const FInputKeyEventArgs* EventArgs);
+
 	FOnLookingGlassScreenshotRequestProcessed Screenshot3DProcessedDelegate;
 	FOnLookingGlassScreenshotRequestProcessed ScreenshotQuiltProcessedDelegate;
 	FOnLookingGlassScreenshotRequestProcessed Screenshot2DProcessedDelegate;

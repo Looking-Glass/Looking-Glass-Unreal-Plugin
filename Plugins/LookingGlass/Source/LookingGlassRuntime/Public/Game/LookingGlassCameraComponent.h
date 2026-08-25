@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Camera/CameraComponent.h"
+#include "Runtime/Launch/Resources/Version.h"
 
 #include "LookingGlassSettings.h"
 #include "Render/LookingGlassRenderingConfig.h"
@@ -42,7 +43,9 @@ public:
 	// UObject garbage collector helper
 	static void AddReferencedObjects(UObject* InThis, FReferenceCollector& Collector);
 
+#if ENGINE_MAJOR_VERSION < 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION < 8)
 	virtual void PostInterpChange(FProperty* PropertyThatChanged) override;
+#endif // UE 5.8 removed this hook; realtime render paths call RefreshInterpolatedCameraState instead.
 
 #if WITH_EDITOR
 	void PostEditChangeProperty(struct FPropertyChangedEvent& PropertyChangedEvent) override;
@@ -244,7 +247,16 @@ public:
 	// Recompute clipping planes / frustum visualization after a change of Size or FieldOfView
 	void UpdateCameraPosition();
 
+	// Refresh clipping/aspect state when Sequencer writes Size or the inherited FieldOfView
+	// directly. UE 5.8 removed PostInterpChange, so render paths poll this before generating views.
+	void RefreshInterpolatedCameraState();
+
 private:
+
+	// Last values applied to clipping planes and the capture actor's spring arm. Sequencer can
+	// write the inherited FieldOfView property without calling a setter on UE 5.8.
+	float LastCameraUpdateSize = -1.0f;
+	float LastCameraUpdateFieldOfView = -1.0f;
 
 #if WITH_EDITORONLY_DATA
 	// The frustum component used to show visually where the camera field of view is

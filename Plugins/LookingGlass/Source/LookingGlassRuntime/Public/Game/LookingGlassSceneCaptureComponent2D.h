@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Components/SceneCaptureComponent2D.h"
+#include "Runtime/Launch/Resources/Version.h"
 
 #include "LookingGlassSettings.h"
 #include "Render/LookingGlassRenderingConfig.h"
@@ -50,7 +51,11 @@ public:
 	//~ End UActorComponent Interface
 
 	//~ Begin USceneCaptureComponent Interface
+#if ENGINE_MAJOR_VERSION < 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION < 6)
 	virtual void UpdateSceneCaptureContents(FSceneInterface* Scene) override;
+#else
+	virtual void UpdateSceneCaptureContents(FSceneInterface* Scene, class ISceneRenderBuilder& SceneRenderBuilder) override;
+#endif
 	//~ End USceneCaptureComponent Interface
 
 	/**

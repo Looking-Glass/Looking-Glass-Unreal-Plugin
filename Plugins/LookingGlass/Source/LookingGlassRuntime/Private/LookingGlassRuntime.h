@@ -239,6 +239,10 @@ private:
 
 	// Delegates
 	FOnLookingGlassInputKey OnLookingGlassInputKey;
+	FDelegateHandle PostEngineInitHandle;
+	FDelegateHandle EnginePreExitHandle;
+	TSharedPtr<uint8, ESPMode::ThreadSafe> LifetimeToken = MakeShared<uint8, ESPMode::ThreadSafe>(0);
+	TWeakPtr<uint8, ESPMode::ThreadSafe> WeakLifetimeToken = LifetimeToken;
 #if WITH_EDITOR
 	FDelegateHandle OnSequencerCreatedHandle;
 #endif

@@ -15,6 +15,7 @@
 #include "ImageUtils.h"
 
 #include "Runtime/Launch/Resources/Version.h"
+#include "Misc/EngineVersionComparison.h"
 
 #include "Misc/FileHelper.h"
 #include "GameFramework/PlayerController.h"
@@ -29,6 +30,7 @@
 #include "TextureResource.h"
 #include "ScreenRendering.h"
 #include "Engine/Console.h"
+#include "InputKeyEventArgs.h"
 
 #if WITH_EDITOR
 #include "UnrealEdGlobals.h"
@@ -44,6 +46,8 @@
 
 #include "RHIStaticStates.h"
 #include "CommonRenderResources.h" // for GFilterVertexDeclaration
+#include "RendererInterface.h"
+#include "RenderingThread.h"
 
 #include "LookingGlassBridge.h"
 
@@ -530,7 +534,12 @@ void FLookingGlassViewportClient::RenderToQuilt(ULookingGlassCameraComponent* Lo
 	}
 }
 
-bool FLookingGlassViewportClient::InputKey(FViewport * InViewport, int32 ControllerId, FKey Key, EInputEvent EventType, float AmountDepressed, bool bGamepad)
+bool FLookingGlassViewportClient::InputKey(const FInputKeyEventArgs& EventArgs)
+{
+	return HandleInputKey(EventArgs.Viewport, EventArgs.ControllerId, EventArgs.Key, EventArgs.Event, EventArgs.AmountDepressed, EventArgs.IsGamepad(), EventArgs);
+}
+
+bool FLookingGlassViewportClient::HandleInputKey(FViewport* InViewport, int32 ControllerId, FKey Key, EInputEvent EventType, float AmountDepressed, bool bGamepad, const FInputKeyEventArgs& EventArgs)
 {
 	ILookingGlassRuntime::Get().OnLookingGlassInputKeyDelegate().Broadcast(InViewport, ControllerId, Key, EventType, AmountDepressed, bGamepad);
 
@@ -571,16 +580,17 @@ bool FLookingGlassViewportClient::InputKey(FViewport * InViewport, int32 Control
 
 			if (FirstLocalPlayerFromController && FirstLocalPlayerFromController->PlayerController)
 			{
-#if ENGINE_MAJOR_VERSION >= 5 && ENGINE_MINOR_VERSION >= 1
+#if ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 6)
+				bResult = FirstLocalPlayerFromController->PlayerController->InputKey(EventArgs);
+#else
 				FInputKeyParams Params;
 				Params.Key = Key;
 				Params.Event = EventType;
 				Params.Delta.X = AmountDepressed;
 				Params.bIsGamepadOverride = bGamepad;
+				Params.InputDevice = EventArgs.InputDevice;
 
 				bResult = FirstLocalPlayerFromController->PlayerController->InputKey(Params);
-#else
-				bResult = FirstLocalPlayerFromController->PlayerController->InputKey(Key, EventType, AmountDepressed, bGamepad);
 #endif
 			}
 
@@ -595,14 +605,26 @@ bool FLookingGlassViewportClient::InputKey(FViewport * InViewport, int32 Control
 	return bResult;
 }
 
-bool FLookingGlassViewportClient::InputAxis(FViewport * InViewport, int32 ControllerId, FKey Key, float Delta, float DeltaTime, int32 NumSamples, bool bGamepad)
+#if ENGINE_MAJOR_VERSION < 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION < 6)
+bool FLookingGlassViewportClient::InputAxis(FViewport* InViewport, FInputDeviceId InputDevice, FKey Key, float Delta, float DeltaTime, int32 NumSamples, bool bGamepad)
+{
+	return HandleInputAxis(InViewport, InputDevice, Key, Delta, DeltaTime, NumSamples, bGamepad, nullptr);
+}
+#else
+bool FLookingGlassViewportClient::InputAxis(const FInputKeyEventArgs& EventArgs)
+{
+	return HandleInputAxis(EventArgs.Viewport, EventArgs.InputDevice, EventArgs.Key, EventArgs.AmountDepressed, EventArgs.DeltaTime, EventArgs.NumSamples, EventArgs.IsGamepad(), &EventArgs);
+}
+#endif
+
+bool FLookingGlassViewportClient::HandleInputAxis(FViewport* InViewport, FInputDeviceId DeviceId, FKey Key, float Delta, float DeltaTime, int32 NumSamples, bool bGamepad, const FInputKeyEventArgs* EventArgs)
 {
 	if (IgnoreInput())
 	{
 		return false;
 	}
 
-	if (GWorld == nullptr || GEngine == nullptr || GEngine->GameViewport == nullptr || &GEngine->GameViewport->Viewport == nullptr)
+	if (GWorld == nullptr || GEngine == nullptr || GEngine->GameViewport == nullptr || GEngine->GameViewport->Viewport == nullptr)
 	{
 		return false;
 	}
@@ -614,34 +636,30 @@ bool FLookingGlassViewportClient::InputAxis(FViewport * InViewport, int32 Contro
 	// in the editor!
 	if (!(GEngine->GameViewport->Viewport->IsSlateViewport() && GEngine->GameViewport->Viewport->IsPlayInEditorViewport()) || GEngine->GameViewport->ViewportConsole == NULL || !GEngine->GameViewport->ViewportConsole->ConsoleActive())
 	{
-#if ENGINE_MAJOR_VERSION >= 5 && ENGINE_MINOR_VERSION >= 1
-		//todo: since UE5.1 should override a different method, which will receive FInputKeyParams, and simply pass it to the console
-		FInputDeviceId DeviceId = FInputDeviceId::CreateFromInternalId(ControllerId);
+#if ENGINE_MAJOR_VERSION < 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION < 6)
 		FInputKeyParams Params;
 		Params.Key = Key;
 		Params.Delta = FVector(static_cast<double>(Delta), 0.0, 0.0);
 		Params.NumSamples = NumSamples;
 		Params.DeltaTime = DeltaTime;
 		Params.bIsGamepadOverride = bGamepad;
+		Params.InputDevice = DeviceId;
 #endif
 		// route to subsystems that care
 		if (GEngine->GameViewport->ViewportConsole != NULL)
 		{
-#if ENGINE_MAJOR_VERSION >= 5 && ENGINE_MINOR_VERSION >= 1
 			bResult = GEngine->GameViewport->ViewportConsole->InputAxis(DeviceId, Key, Delta, DeltaTime, NumSamples, bGamepad);
-#else
-			bResult = GEngine->GameViewport->ViewportConsole->InputAxis(ControllerId, Key, Delta, DeltaTime, NumSamples, bGamepad);
-#endif
 		}
 		if (!bResult)
 		{
-			ULocalPlayer* const TargetPlayer = GEngine->GetLocalPlayerFromControllerId(GEngine->GameViewport, ControllerId);
+			ULocalPlayer* const TargetPlayer = GEngine->GetLocalPlayerFromInputDevice(GEngine->GameViewport, DeviceId);
 			if (TargetPlayer && TargetPlayer->PlayerController)
 			{
-#if ENGINE_MAJOR_VERSION >= 5 && ENGINE_MINOR_VERSION >= 1
-				bResult = TargetPlayer->PlayerController->InputKey(Params);
+#if ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 6)
+				check(EventArgs != nullptr);
+				bResult = TargetPlayer->PlayerController->InputKey(*EventArgs);
 #else
-				bResult = TargetPlayer->PlayerController->InputAxis(Key, Delta, DeltaTime, NumSamples, bGamepad);
+				bResult = TargetPlayer->PlayerController->InputKey(Params);
 #endif
 			}
 		}
@@ -653,10 +671,11 @@ bool FLookingGlassViewportClient::InputAxis(FViewport * InViewport, int32 Contro
 			UGameViewportClient *NextViewport = GEngine->GetNextPIEViewport(GEngine->GameViewport);
 			if (NextViewport)
 			{
-#if ENGINE_MAJOR_VERSION >= 5 && ENGINE_MINOR_VERSION >= 1
-				bResult = NextViewport->InputAxis(InViewport, DeviceId, Key, Delta, DeltaTime, NumSamples, bGamepad);
+#if ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 6)
+				check(EventArgs != nullptr);
+				bResult = NextViewport->InputAxis(*EventArgs);
 #else
-				bResult = NextViewport->InputAxis(InViewport, ControllerId, Key, Delta, DeltaTime, NumSamples, bGamepad);
+				bResult = NextViewport->InputAxis(InViewport, DeviceId, Key, Delta, DeltaTime, NumSamples, bGamepad);
 #endif
 			}
 		}
@@ -676,6 +695,7 @@ bool FLookingGlassViewportClient::InputChar(FViewport * InViewport, int32 Contro
 	return false;
 }
 
+#if ENGINE_MAJOR_VERSION < 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION < 6)
 bool FLookingGlassViewportClient::InputTouch(FViewport * InViewport, int32 ControllerId, uint32 Handle, ETouchType::Type Type, const FVector2D & TouchLocation, float Force, FDateTime DeviceTimestamp, uint32 TouchpadIndex)
 {
 	if (IgnoreInput())
@@ -683,7 +703,7 @@ bool FLookingGlassViewportClient::InputTouch(FViewport * InViewport, int32 Contr
 		return false;
 	}
 
-	if (GWorld == nullptr || GEngine == nullptr || GEngine->GameViewport == nullptr || &GEngine->GameViewport->Viewport == nullptr)
+	if (GWorld == nullptr || GEngine == nullptr || GEngine->GameViewport == nullptr || GEngine->GameViewport->Viewport == nullptr)
 	{
 		return false;
 	}
@@ -692,12 +712,8 @@ bool FLookingGlassViewportClient::InputTouch(FViewport * InViewport, int32 Contr
 	bool bResult = false;
 	if (GEngine->GameViewport->ViewportConsole)
 	{
-#if ENGINE_MAJOR_VERSION >= 5 && ENGINE_MINOR_VERSION >= 1
 		FInputDeviceId DeviceId = FInputDeviceId::CreateFromInternalId(ControllerId);
 		bResult = GEngine->GameViewport->ViewportConsole->InputTouch(DeviceId, Handle, Type, TouchLocation, Force, DeviceTimestamp, TouchpadIndex);
-#else
-		bResult = GEngine->GameViewport->ViewportConsole->InputTouch(ControllerId, Handle, Type, TouchLocation, Force, DeviceTimestamp, TouchpadIndex);
-#endif
 	}
 	if (!bResult)
 	{
@@ -715,6 +731,67 @@ bool FLookingGlassViewportClient::InputMotion(FViewport * InViewport, int32 Cont
 {
 	return false;
 }
+#elif ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION < 8
+bool FLookingGlassViewportClient::InputTouch(FViewport* InViewport, FInputDeviceId DeviceId, uint32 Handle, ETouchType::Type Type, const FVector2D& TouchLocation, float Force, uint32 TouchpadIndex, uint64 Timestamp)
+{
+	if (IgnoreInput() || GWorld == nullptr || GEngine == nullptr || GEngine->GameViewport == nullptr || GEngine->GameViewport->Viewport == nullptr)
+	{
+		return false;
+	}
+
+	bool bResult = false;
+	if (GEngine->GameViewport->ViewportConsole)
+	{
+		// UConsole retained its legacy FDateTime API through UE 5.7. Mirror
+		// UGameViewportClient by forwarding the event timestamp through that bridge.
+		bResult = GEngine->GameViewport->ViewportConsole->InputTouch(DeviceId, Handle, Type, TouchLocation, Force, FDateTime(static_cast<int64>(Timestamp)), TouchpadIndex);
+	}
+	if (!bResult)
+	{
+		ULocalPlayer* const TargetPlayer = GEngine->GetLocalPlayerFromInputDevice(GEngine->GameViewport, DeviceId);
+		if (TargetPlayer && TargetPlayer->PlayerController)
+		{
+			bResult = TargetPlayer->PlayerController->InputTouch(DeviceId, Handle, Type, TouchLocation, Force, TouchpadIndex, Timestamp);
+		}
+	}
+
+	return bResult;
+}
+
+bool FLookingGlassViewportClient::InputMotion(FViewport* InViewport, FInputDeviceId DeviceId, const FVector& Tilt, const FVector& RotationRate, const FVector& Gravity, const FVector& Acceleration, uint64 Timestamp)
+{
+	return false;
+}
+#else
+bool FLookingGlassViewportClient::InputTouch(FViewport* InViewport, FTouchId TouchId, ETouchType::Type Type, const FVector2D& TouchLocation, float Force, uint64 Timestamp)
+{
+	if (IgnoreInput() || GWorld == nullptr || GEngine == nullptr || GEngine->GameViewport == nullptr || GEngine->GameViewport->Viewport == nullptr)
+	{
+		return false;
+	}
+
+	bool bResult = false;
+	if (GEngine->GameViewport->ViewportConsole)
+	{
+		bResult = GEngine->GameViewport->ViewportConsole->InputTouch(TouchId, Type, TouchLocation, Force, Timestamp);
+	}
+	if (!bResult)
+	{
+		ULocalPlayer* const TargetPlayer = GEngine->GetLocalPlayerFromInputDevice(GEngine->GameViewport, TouchId.GetDeviceId());
+		if (TargetPlayer && TargetPlayer->PlayerController)
+		{
+			bResult = TargetPlayer->PlayerController->InputTouch(TouchId, Type, TouchLocation, Force, Timestamp);
+		}
+	}
+
+	return bResult;
+}
+
+bool FLookingGlassViewportClient::InputMotion(FViewport* InViewport, FInputDeviceId DeviceId, const FVector& Tilt, const FVector& RotationRate, const FVector& Gravity, const FVector& Acceleration, uint64 Timestamp)
+{
+	return false;
+}
+#endif
 
 void FLookingGlassViewportClient::RedrawRequested(FViewport * InViewport)
 {
@@ -762,7 +839,11 @@ static void ClipScreenshot(FIntVector& Size, FIntRect& SourceRect, TArray<FColor
 			FMemory::Memmove(Data + Row * NewWidth, Data + (Row + CaptureTopRow) * OldWidth + CaptureLeftColumn, NewWidth * sizeof(*Data));
 		}
 
+#if UE_VERSION_OLDER_THAN(5, 4, 0)
+		Bitmap.RemoveAt(NewWidth * NewHeight, OldWidth * OldHeight - NewWidth * NewHeight, true);
+#else
 		Bitmap.RemoveAt(NewWidth * NewHeight, OldWidth * OldHeight - NewWidth * NewHeight, EAllowShrinking::Yes);
+#endif
 		Size = FIntVector(NewWidth, NewHeight, 0);
 	}
 }
@@ -996,6 +1077,14 @@ bool FLookingGlassViewportClient::HandleTillingCommand(const TCHAR* Cmd, FOutput
 	else if (FParse::Command(&Cmd, TEXT("65inch")))
 	{
 		TilingSettings = ELookingGlassQualitySettings::Q_65_Inch;
+	}
+	else if (FParse::Command(&Cmd, TEXT("27inchPortrait")))
+	{
+		TilingSettings = ELookingGlassQualitySettings::Q_27_Portrait;
+	}
+	else if (FParse::Command(&Cmd, TEXT("27inchLandscape")))
+	{
+		TilingSettings = ELookingGlassQualitySettings::Q_27_Landscape;
 	}
 	else if (FParse::Command(&Cmd, TEXT("EightNineLegacy")))
 	{

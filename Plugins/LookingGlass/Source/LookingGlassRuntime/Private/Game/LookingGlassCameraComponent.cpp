@@ -14,6 +14,7 @@
 #include "GameFramework/Actor.h"
 #include "Math/UnrealMathUtility.h"
 #include "Engine/TextureRenderTarget2D.h"
+#include "RenderingThread.h"
 
 // For focus plane mesh and component
 #include "UObject/ConstructorHelpers.h"
@@ -300,6 +301,7 @@ void ULookingGlassCameraComponent::GetCameraView(float DeltaTime, FMinimalViewIn
  *
  * @param PropertyThatChanged	Property that changed
  */
+#if ENGINE_MAJOR_VERSION < 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION < 8)
 void ULookingGlassCameraComponent::PostInterpChange(FProperty* PropertyThatChanged)
 {
 	// Note: deliberately not calling Super::PostInterpChange() - it's a deprecated no-op left over
@@ -312,6 +314,7 @@ void ULookingGlassCameraComponent::PostInterpChange(FProperty* PropertyThatChang
 		OnLookingGlassObjectChanged.ExecuteIfBound(this);
 	}
 }
+#endif // UE 5.8 removed this hook; realtime render paths call RefreshInterpolatedCameraState instead.
 
 // This function is called when "Size" property is changed in blueprint or interpolated by movie sequence
 void ULookingGlassCameraComponent::SetSize(float InSize)
@@ -400,6 +403,8 @@ void ULookingGlassCameraComponent::UpdateCameraPosition()
 	// Keep the standard camera aspect in sync with the Looking Glass device, so the in-editor
 	// camera preview and Movie Render Queue output match what the device shows
 	AspectRatio = GetAspectRatio();
+	LastCameraUpdateSize = Size;
+	LastCameraUpdateFieldOfView = FieldOfView;
 
 #if WITH_EDITOR
 	RefreshVisualRepresentation();
@@ -667,6 +672,16 @@ ELookingGlassQualitySettings ULookingGlassCameraComponent::GetAutomaticTilingQua
 		return ELookingGlassQualitySettings::Q_32_Landscape;
 	}
 
+	if (Calibration.Serial.Contains(TEXT("LKG-N")))
+	{
+		return ELookingGlassQualitySettings::Q_27_Portrait;
+	}
+
+	if (Calibration.Serial.Contains(TEXT("LKG-R")))
+	{
+		return ELookingGlassQualitySettings::Q_27_Landscape;
+	}
+
 	if (Calibration.Serial.Contains(TEXT("Looking Glass - 8.9\"")) ||
 		Calibration.Serial.Contains(TEXT("LKG-2K")))
 	{
@@ -728,6 +743,19 @@ void ULookingGlassCameraComponent::SetupCaptureDriver()
 	CaptureShowFlags.SetMotionBlur(bEnableMotionBlur);
 }
 
+void ULookingGlassCameraComponent::RefreshInterpolatedCameraState()
+{
+	// UE 5.8 removed PostInterpChange. Detect direct Sequencer writes to the inherited
+	// FieldOfView property so realtime rendering refreshes clipping planes and the owning
+	// capture actor's spring-arm before generating a quilt or 2D view.
+	if (!FMath::IsNearlyEqual(LastCameraUpdateSize, Size) ||
+		!FMath::IsNearlyEqual(LastCameraUpdateFieldOfView, FieldOfView))
+	{
+		UpdateCameraPosition();
+		OnLookingGlassObjectChanged.ExecuteIfBound(this);
+	}
+}
+
 // Called by LookingGlassViewportClient used for capturing new snapshot of scene from the camera.
 // Note: this is the realtime preview path. Offline quilt rendering through Movie Render Queue
 // (including Path Tracing) is implemented by UMoviePipelineLookingGlassQuiltPass in the
@@ -739,6 +767,8 @@ void ULookingGlassCameraComponent::RenderViews()
 	{
 		return;
 	}
+
+	RefreshInterpolatedCameraState();
 
 	// Release RT used for 2D rendering, if any
 	TextureTarget2DRendering = nullptr;
@@ -785,6 +815,8 @@ void ULookingGlassCameraComponent::Render2DView(int32 SizeX, int32 SizeY)
 	{
 		return;
 	}
+
+	RefreshInterpolatedCameraState();
 
 	const FLGDeviceCalibration& Calibration = ILookingGlassRuntime::Get().GetCurrentCalibration();
 

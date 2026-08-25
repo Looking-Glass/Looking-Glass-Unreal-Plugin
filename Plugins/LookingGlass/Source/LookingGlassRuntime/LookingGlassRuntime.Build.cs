@@ -23,6 +23,16 @@ namespace UnrealBuildTool.Rules
             bPrecompile = true;
             bEnableExceptions = true;
 
+#if !UE_5_5_OR_LATER
+			// UE 5.3/5.4's ConcurrentLinearAllocator.h evaluates Clang's __has_feature macro
+			// under recent MSVC versions. Release builds do not use AddressSanitizer, so
+			// disable that optional header probe for this module's Win64 translation units.
+			if (Target.Platform == UnrealTargetPlatform.Win64)
+			{
+				PrivateDefinitions.Add("PLATFORM_HAS_ASAN_INCLUDE=0");
+			}
+#endif
+
 
             PublicIncludePaths.AddRange(
                 new string[] {

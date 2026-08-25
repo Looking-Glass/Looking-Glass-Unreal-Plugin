@@ -116,6 +116,7 @@ void ULookingGlassSceneCaptureComponent2D::OnComponentDestroyed(bool bDestroying
 	LegacyOwnerCamera = nullptr;
 }
 
+#if ENGINE_MAJOR_VERSION < 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION < 6)
 void ULookingGlassSceneCaptureComponent2D::UpdateSceneCaptureContents(FSceneInterface* Scene)
 {
 	// This function is called by USceneCaptureComponent2D::CaptureSceneDeferred() and UpdateDeferredCaptures()
@@ -128,6 +129,17 @@ void ULookingGlassSceneCaptureComponent2D::UpdateSceneCaptureContents(FSceneInte
 		Super::UpdateSceneCaptureContents(Scene);
 	}
 }
+#else
+void ULookingGlassSceneCaptureComponent2D::UpdateSceneCaptureContents(FSceneInterface* Scene, ISceneRenderBuilder& SceneRenderBuilder)
+{
+	// Deferred captures are suppressed because Looking Glass renders each quilt view manually.
+	// Capture2D temporarily opts in when a conventional single-view capture is requested.
+	if (bAllow2DCapture)
+	{
+		Super::UpdateSceneCaptureContents(Scene, SceneRenderBuilder);
+	}
+}
+#endif
 
 void ULookingGlassSceneCaptureComponent2D::Capture2D()
 {

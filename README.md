@@ -6,6 +6,16 @@ It is not intended for realtime content generation at this time.
 
 For more information on how to use the plugin, check out our [docs site](https://docs.lookingglassfactory.com/developer-tools/index-2)!
 
+## Supported Unreal Engine versions
+
+Prebuilt Windows packages are available for Unreal Engine 5.3, 5.4, 5.5, 5.6, 5.7, and 5.8. Choose the ZIP whose filename matches your exact Unreal Engine minor version; Unreal plugin binaries are not interchangeable between minor versions.
+
+## What's new in 2.2.0
+
+- Adds a Movie Render Queue quilt pass, including Path Tracing support.
+- Adds automatic presets for 27-inch Gen 3 portrait (`LKG-N`) and landscape (`LKG-R`) light field displays.
+- Supports Unreal Engine 5.3 through 5.8 from one shared source tree, including the input, scene-capture, rendering, and HTTP API changes across those releases.
+
 ## Version 2.0 migration
 
 Version 2.0 intentionally changes the Looking Glass camera API. The user-facing `ULookingGlassCameraComponent` now inherits from Unreal's `UCameraComponent`; `ULookingGlassSceneCaptureComponent2D` remains only as the plugin's internal quilt capture driver.
@@ -29,6 +39,7 @@ Alternatively you may get the snapshot of the repository using downloading of zi
 - Looking Glass Bridge 2.5.1 or higher
 - Visual Studio 2022
 - **Unreal Engine 5.5 requires MSVC v143 (14.38 - 17.8). Working with Unreal Engine with another MSVC version will cause the engine to fail to compile.**
+- Unreal Engine 5.3 and 5.4 contain an optional AddressSanitizer header probe that fails with newer MSVC toolchains. The plugin's Win64 release build rules disable that probe for those two engine versions; use Epic's preferred compiler if you need an AddressSanitizer build.
 - Download the project from Github (see above).
 - Find the UnrealSDK.uproject file in the root folder of repository.
 - If you have multiple Unreal engine versions installed, right click on this file, select "Switch unreal engine version" option and select the one which you want to use with this plugin.
@@ -41,7 +52,7 @@ Alternatively you may get the snapshot of the repository using downloading of zi
 ## How to use pre-built version of the plugin
 
 - As a pre-requisite, you should have an existing project for Unreal Engine.
-- Download the latest release for your Unreal engine version [here](https://github.com/Looking-Glass/Looking-Glass-Unreal-Plugin/releases)
+- Download the latest release for your exact Unreal Engine minor version [here](https://github.com/Looking-Glass/Looking-Glass-Unreal-Plugin/releases).
 - Create Plugins folder in your project (it may already exist if you have any project-level plugins).
 - Create a LookingGlass folder inside of Plugins. 
 - Unzip the archive file with precompiled plugin into this folder.

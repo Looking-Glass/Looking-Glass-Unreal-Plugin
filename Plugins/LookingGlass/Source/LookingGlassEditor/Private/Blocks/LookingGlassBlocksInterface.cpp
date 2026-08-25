@@ -2,6 +2,7 @@
 #include "LookingGlassBlocksUI.h" // just for OpenBlocksWindow()
 
 #include "Misc/App.h"
+#include "Misc/EngineVersionComparison.h"
 #include "Misc/MessageDialog.h"
 #include "Misc/Paths.h"
 
@@ -39,6 +40,21 @@ DEFINE_LOG_CATEGORY_STATIC(LogLookingGlassBlocks, Log, All);
 #define LOCTEXT_NAMESPACE "FLookingGlassBlocksInterface"
 
 //#define DEBUG_AUTH_TOKEN		""
+
+static bool IsHttpConnectionFailure(const FHttpRequestPtr& Request)
+{
+	if (!Request.IsValid())
+	{
+		return false;
+	}
+
+#if UE_VERSION_OLDER_THAN(5, 4, 0)
+	return Request->GetStatus() == EHttpRequestStatus::Failed_ConnectionError;
+#else
+	return Request->GetStatus() == EHttpRequestStatus::Failed &&
+		Request->GetFailureReason() == EHttpFailureReason::ConnectionError;
+#endif
+}
 
 FLookingGlassBlocksInterface::FLookingGlassBlocksInterface()
 	: bDebugRequests(false)
@@ -115,10 +131,13 @@ void FLookingGlassBlocksInterface::SendRequest(const FString& URL, const FString
 			{
 				// There could be a EHttpRequestStatus::Failed_ConnectionError, could retry the request in this case.
 				// Take a look at FHttpRetrySystem.
-				if (Request->GetStatus() == EHttpRequestStatus::Failed &&
-					Request->GetFailureReason() == EHttpFailureReason::ConnectionError)
+				if (!Request.IsValid())
 				{
-					FString HostName = FPlatformHttp::GetUrlDomain(Response->GetURL());
+					ErrorMessage = TEXT("HTTP request is no longer valid");
+				}
+				else if (IsHttpConnectionFailure(Request))
+				{
+					FString HostName = FPlatformHttp::GetUrlDomain(Request->GetURL());
 					ErrorMessage = FString::Printf(TEXT("Failed to connect to host %s"), *HostName);
 				}
 				else
@@ -663,10 +682,13 @@ void FLookingGlassBlocksInterface::StartUpload()
 				{
 					// There could be a EHttpRequestStatus::Failed_ConnectionError, could retry the request in this case.
 					FString ErrorMessage;
-					if (Request->GetStatus() == EHttpRequestStatus::Failed &&
-						Request->GetFailureReason() == EHttpFailureReason::ConnectionError)
+					if (!Request.IsValid())
 					{
-						FString HostName = FPlatformHttp::GetUrlDomain(Response->GetURL());
+						ErrorMessage = TEXT("HTTP request is no longer valid");
+					}
+					else if (IsHttpConnectionFailure(Request))
+					{
+						FString HostName = FPlatformHttp::GetUrlDomain(Request->GetURL());
 						ErrorMessage = FString::Printf(TEXT("Failed to connect to host %s"), *HostName);
 					}
 					else
@@ -678,11 +700,18 @@ void FLookingGlassBlocksInterface::StartUpload()
 			});
 
 		// Setup the progress callback
-		Request->OnRequestProgress64().BindLambda([this](FHttpRequestPtr Request, int32 BytesSent, int32 BytesReceived)
+#if UE_VERSION_OLDER_THAN(5, 4, 0)
+		Request->OnRequestProgress().BindLambda([this](FHttpRequestPtr Request, int32 BytesSent, int32 BytesReceived)
+#else
+		Request->OnRequestProgress64().BindLambda([this](FHttpRequestPtr Request, uint64 BytesSent, uint64 BytesReceived)
+#endif
 			{
 				if (UploadState.IsValid() && UploadState->ProgressCallback)
 				{
-					UploadState->ProgressCallback((float)BytesSent / UploadState->Args.FileSize);
+					const float Progress = UploadState->Args.FileSize > 0
+						? static_cast<float>(BytesSent) / static_cast<float>(UploadState->Args.FileSize)
+						: 0.0f;
+					UploadState->ProgressCallback(Progress);
 				}
 			});
 

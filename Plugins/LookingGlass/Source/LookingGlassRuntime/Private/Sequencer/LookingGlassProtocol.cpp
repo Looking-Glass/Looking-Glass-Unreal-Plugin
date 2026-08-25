@@ -3,6 +3,7 @@
 #include "HAL/FileManager.h"
 #include "Misc/CommandLine.h"
 #include "Misc/FeedbackContext.h"
+#include "Misc/EngineVersionComparison.h"
 #include "Misc/ScopedSlowTask.h"
 #include "ImageWriteQueue.h"
 #include "Modules/ModuleManager.h"
@@ -83,7 +84,11 @@ void ULookingGlassProtocol::OnFrameReady(const TArray<FColor>& Bitmap, int32 Wid
 	}
 
 	FFramePayloadPtr Payload = PendingFramePayloads[0];
+#if UE_VERSION_OLDER_THAN(5, 4, 0)
+	PendingFramePayloads.RemoveAt(0, 1, true);
+#else
 	PendingFramePayloads.RemoveAt(0, 1, EAllowShrinking::Yes);
+#endif
 
 	FCapturedFrameData FrameData(FIntPoint(Width, Height), Payload);
 	FrameData.ColorBuffer = Bitmap;

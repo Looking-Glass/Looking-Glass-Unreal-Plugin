@@ -415,8 +415,9 @@ void UMoviePipelineLookingGlassQuiltPass::RenderSample_GameThreadImpl(const FMov
 
 	EnsureViewStates(TilingValues, World, bPathTracing);
 
-	// Refresh near/far clipping planes in case Size or FieldOfView are animated
-	Camera->UpdateCameraPosition();
+	// Refresh clipping planes and the capture actor's spring arm in case Size or
+	// FieldOfView are animated. UE 5.8 removed PostInterpChange.
+	Camera->RefreshInterpolatedCameraState();
 
 	float EffectiveViewCone = ViewCone;
 	if (bUseDeviceViewCone)

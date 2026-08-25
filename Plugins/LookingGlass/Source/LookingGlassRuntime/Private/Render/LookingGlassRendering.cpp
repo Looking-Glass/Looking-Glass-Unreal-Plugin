@@ -10,6 +10,7 @@
 #include "TextureResource.h"
 #include "ScreenRendering.h"
 #include "CommonRenderResources.h"
+#include "RendererInterface.h"
 
 #include "Runtime/Launch/Resources/Version.h"
 

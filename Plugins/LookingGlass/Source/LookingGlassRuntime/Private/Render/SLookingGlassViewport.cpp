@@ -10,6 +10,7 @@
 #include "Render/LookingGlassViewportClient.h"
 #include "Misc/LookingGlassLog.h"
 #include "ILookingGlassRuntime.h"
+#include "Misc/EngineVersionComparison.h"
 
 void SLookingGlassViewport::Construct(const FArguments& InArgs)
 {
@@ -41,15 +42,23 @@ void SLookingGlassViewport::Construct(const FArguments& InArgs)
 	// Create Viewport Client
 	LookingGlassViewportClient = MakeShareable(new FLookingGlassViewportClient());
 
-	// Create Scene Viewport
+	// Create Scene Viewport. UE 5.8 tracks the viewport/client association and calls
+	// RemoveAssociation while the scene viewport is destroyed, so give it shared
+	// ownership of the client instead of the deprecated raw pointer.
+#if UE_VERSION_OLDER_THAN(5, 8, 0)
 	SceneViewport = MakeShareable(new FSceneViewport(LookingGlassViewportClient.Get(), Viewport));
+#else
+	SceneViewport = FSceneViewport::Create(LookingGlassViewportClient, Viewport);
+#endif
 
 	// Set Viewport 
 	LookingGlassViewportClient->Viewport = SceneViewport.Get();
 	LookingGlassViewportClient->LookingGlassSceneViewport = SceneViewport.Get();
 
 	// Assign SceneViewport to Viewport widget. Needed for rendering
+#if UE_VERSION_OLDER_THAN(5, 8, 0)
 	Viewport->SetViewportInterface(SceneViewport.ToSharedRef());
+#endif
 
 	// Assign Viewport widget for our custom PlayScene Viewport
 	this->ChildSlot
